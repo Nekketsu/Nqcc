@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Nqcc\Nqcc.csproj" />
+  <Project Path="Nqcc.Cli\Nqcc.Cli.csproj" />
+  <Properties Name="Visual Studio">
+    <Property Name="OpenWith" Value="17" />
+  </Properties>
+</Solution>
