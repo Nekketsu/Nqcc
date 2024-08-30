@@ -20,10 +20,15 @@ public abstract class Compiler : ICompiler
         var parser = new Parser(tokens);
         var ast = parser.Parse();
 
+        if (stage < Stage.Tacky) { return assemblyFile; }
+
+        var tackyGenerator = new TackyGenerator(ast);
+        var tacky = tackyGenerator.Generate();
+
         if (stage < Stage.Codegen) { return assemblyFile; }
 
-        var assemblyGenerator = new AssemblyGenerator(ast);
-        var assembly = assemblyGenerator.Convert();
+        var assemblyGenerator = new AssemblyGenerator(tacky);
+        var assembly = assemblyGenerator.Generate();
 
         if (stage < Stage.Assembly) { return assemblyFile; }
 

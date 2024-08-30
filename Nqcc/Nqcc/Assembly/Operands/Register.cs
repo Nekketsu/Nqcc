@@ -1,5 +1,5 @@
 ﻿namespace Nqcc.Assembly.Operands;
 
-public class Register : Operand
+public abstract class Register() : Operand
 {
 }

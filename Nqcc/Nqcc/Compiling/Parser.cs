@@ -1,4 +1,6 @@
 ﻿using Nqcc.Ast;
+using Nqcc.Ast.Expressions;
+using Nqcc.Ast.UnaryOperators;
 using Nqcc.Lex;
 using Nqcc.Lex.Keywords;
 using System.Collections.Immutable;
@@ -84,15 +86,49 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         return new Ast.Statements.Return(expression);
     }
 
-    private Ast.Expressions.Constant ParseExpression()
+    private Expression ParseExpression() => Current switch
     {
-        return ParseConstantExpression();
-    }
+        Lex.Constant => ParseConstantExpression(),
+        Tilde or Minus => ParseUnaryExpression(),
+        OpenParenthesis => ParseParenthesizedExpression(),
+        _ => throw new Exception($"Expected an expression but found \"{Current}\""),
+    };
 
     private Ast.Expressions.Constant ParseConstantExpression()
     {
-        var constant = Expect<Constant>();
+        var constant = Expect<Lex.Constant>();
 
         return new Ast.Expressions.Constant(constant.Value);
+    }
+
+    private Unary ParseUnaryExpression()
+    {
+        var unaryOperator = ParseUnaryOperator();
+        var expression = ParseExpression();
+
+        return new Unary(unaryOperator, expression);
+    }
+
+    private Expression ParseParenthesizedExpression()
+    {
+        Expect<OpenParenthesis>();
+        var expression = ParseExpression();
+        Expect<CloseParenthesis>();
+
+        return expression;
+    }
+
+    private UnaryOperator ParseUnaryOperator()
+    {
+        var token = TakeToken();
+
+        UnaryOperator unaryOperator = token switch
+        {
+            Tilde => new Complement(),
+            Minus => new Negate(),
+            _ => throw new Exception($"Expected a unary operator but found a {token}")
+        };
+
+        return unaryOperator;
     }
 }

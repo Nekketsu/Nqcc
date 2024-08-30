@@ -14,6 +14,7 @@ var sourceArgument = new Argument<string>("source", "Source File");
 
 var lexOption = new Option<bool>("--lex", "Run the lexer");
 var parseOption = new Option<bool>("--parse", "Run the lexer and parser");
+var tackyOption = new Option<bool>("--tacky", "Run the lexer, parser, and tacky generator");
 var codegenOption = new Option<bool>("--codegen", "Run through code generation but stop befor emitting assembly");
 var assemblyOption = new Option<bool>(["-s", "-S"], "Stop before assembling (keep assembly file)");
 
@@ -26,6 +27,7 @@ var rootCommand = new RootCommand("A not-quite-C compiler")
     sourceArgument,
     lexOption,
     parseOption,
+    tackyOption,
     codegenOption,
     assemblyOption,
     targetOption,
@@ -36,24 +38,27 @@ rootCommand.AddValidator(result =>
 {
     if (result.Children.Count(c => c.Symbol == lexOption ||
                                    c.Symbol == parseOption ||
+                                   c.Symbol == tackyOption ||
                                    c.Symbol == codegenOption ||
                                    c.Symbol == assemblyOption) > 1)
     {
-        result.ErrorMessage = "You must use either --lex or --parse or --codegen";
+        result.ErrorMessage = "You must use either --lex or --parse or --tacky or --codegen";
     }
 });
 
-rootCommand.SetHandler(async (source, lex, parse, codegen, assembly, target, debug) =>
+rootCommand.SetHandler(async (source, lex, parse, tacky, codegen, assembly, target, debug) =>
 {
     var stage = lex
         ? Stage.Lex
         : parse
             ? Stage.Parse
-            : codegen
-                ? Stage.Codegen
-                : assembly
-                    ? Stage.Assembly
-                    : Stage.Executable;
+            : tacky
+                ? Stage.Tacky
+                : codegen
+                    ? Stage.Codegen
+                    : assembly
+                        ? Stage.Assembly
+                        : Stage.Executable;
 
     var settings = new Settings
     {
@@ -79,7 +84,7 @@ rootCommand.SetHandler(async (source, lex, parse, codegen, assembly, target, deb
         Console.Error.WriteLine(e.Message);
         throw;
     }
-}, sourceArgument, lexOption, parseOption, codegenOption, assemblyOption, targetOption, debugOption);
+}, sourceArgument, lexOption, parseOption, tackyOption, codegenOption, assemblyOption, targetOption, debugOption);
 
 await rootCommand.InvokeAsync(args);
 

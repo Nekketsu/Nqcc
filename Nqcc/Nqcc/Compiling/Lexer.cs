@@ -59,6 +59,17 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
             case ';':
                 position++;
                 return new Semicolon(CurrentTokenText);
+            case '~':
+                position++;
+                return new Tilde(CurrentTokenText);
+            case '-':
+                position++;
+                if (Current == '-')
+                {
+                    position++;
+                    return new MinusMinus(CurrentTokenText);
+                }
+                return new Minus(CurrentTokenText);
         }
 
         throw new Exception($"Lexer failure: bad character {Current}");
