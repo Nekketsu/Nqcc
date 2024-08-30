@@ -51,6 +51,8 @@ public class PseudoRegisterReplacer(Program tacky)
     {
         Mov mov => ReplaceMovInstruction(mov),
         Unary unary => ReplaceUnaryInstruction(unary),
+        Binary binary => ReplaceBinaryInstruction(binary),
+        Idiv idiv => ReplaceIdivInstruction(idiv),
         AllocateStack => throw new Exception("Internal error: AllocateStack shouldn't be present at this point"),
         _ => instruction
     };
@@ -68,6 +70,20 @@ public class PseudoRegisterReplacer(Program tacky)
         var destination = ReplaceOperand(unary.Destination);
 
         return new Unary(unary.Operator, destination);
+    }
+    private Binary ReplaceBinaryInstruction(Binary binary)
+    {
+        var source = ReplaceOperand(binary.Source);
+        var destination = ReplaceOperand(binary.Destination);
+
+        return new Binary(binary.Operator, source, destination);
+    }
+
+    private Idiv ReplaceIdivInstruction(Idiv idiv)
+    {
+        var operand = ReplaceOperand(idiv.Operand);
+
+        return new Idiv(operand);
     }
 
     private Operand ReplaceOperand(Operand operand) => operand switch

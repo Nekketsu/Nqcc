@@ -1,4 +1,5 @@
 ﻿using Nqcc.Tacky;
+using Nqcc.Tacky.BinaryOperators;
 using Nqcc.Tacky.Instructions;
 using Nqcc.Tacky.Operands;
 using Nqcc.Tacky.UnaryOperators;
@@ -46,6 +47,7 @@ public class TackyGenerator(Ast.Program ast)
     {
         Ast.Expressions.Constant constant => EmitConstant(constant),
         Ast.Expressions.Unary unary => EmitUnary(builder, unary),
+        Ast.Expressions.Binary binary => EmitBinary(builder, binary),
         _ => throw new NotImplementedException()
     };
 
@@ -65,11 +67,38 @@ public class TackyGenerator(Ast.Program ast)
         return destination;
     }
 
+    private Variable EmitBinary(ImmutableArray<Instruction>.Builder builder, Ast.Expressions.Binary binary)
+    {
+        var left = EmitExpression(builder, binary.Left);
+        var right = EmitExpression(builder, binary.Right);
+        var destinationName = MakeTemporary();
+        var destination = new Variable(destinationName);
+        var tackyOperator = ConvertBinaryOperator(binary.Operator);
+        builder.Add(new Binary(left, tackyOperator, right, destination));
+
+        return destination;
+    }
+
     private static UnaryOperator ConvertUnaryOperator(Ast.UnaryOperator @operator) => @operator switch
     {
         Ast.UnaryOperators.Complement => new Complement(),
         Ast.UnaryOperators.Negate => new Negate(),
         _ => throw new NotImplementedException(),
+    };
+
+    private static BinaryOperator ConvertBinaryOperator(Ast.BinaryOperator @operator) => @operator switch
+    {
+        Ast.BinaryOperators.Add => new Add(),
+        Ast.BinaryOperators.Subtract => new Subtract(),
+        Ast.BinaryOperators.Multiply => new Multiply(),
+        Ast.BinaryOperators.Divide => new Divide(),
+        Ast.BinaryOperators.Modulo => new Modulo(),
+        Ast.BinaryOperators.BitwiseAnd => new BitwiseAnd(),
+        Ast.BinaryOperators.BitwiseOr => new BitwiseOr(),
+        Ast.BinaryOperators.BitwiseXor => new BitwiseXor(),
+        Ast.BinaryOperators.LeftShift => new LeftShift(),
+        Ast.BinaryOperators.RightShift => new RightShift(),
+        _ => throw new NotImplementedException()
     };
 
     private string MakeTemporary() => $"tmp.{temporaryCounter++}";

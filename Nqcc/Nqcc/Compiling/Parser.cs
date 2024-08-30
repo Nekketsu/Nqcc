@@ -1,4 +1,5 @@
 ﻿using Nqcc.Ast;
+using Nqcc.Ast.BinaryOperators;
 using Nqcc.Ast.Expressions;
 using Nqcc.Ast.UnaryOperators;
 using Nqcc.Lex;
@@ -86,7 +87,24 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         return new Ast.Statements.Return(expression);
     }
 
-    private Expression ParseExpression() => Current switch
+    private Expression ParseExpression(int minimumPrecedence = 0)
+    {
+        var left = ParseFactor();
+
+        var precedence = GetPrecedence(Current);
+        while (precedence >= 0 && precedence >= minimumPrecedence)
+        {
+            var binaryOperator = ParseBinaryOperator();
+            var right = ParseExpression(precedence + 1);
+            left = new Binary(left, binaryOperator, right);
+
+            precedence = GetPrecedence(Current);
+        }
+
+        return left;
+    }
+
+    private Expression ParseFactor() => Current switch
     {
         Lex.Constant => ParseConstantExpression(),
         Tilde or Minus => ParseUnaryExpression(),
@@ -104,7 +122,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
     private Unary ParseUnaryExpression()
     {
         var unaryOperator = ParseUnaryOperator();
-        var expression = ParseExpression();
+        var expression = ParseFactor();
 
         return new Unary(unaryOperator, expression);
     }
@@ -116,6 +134,28 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         Expect<CloseParenthesis>();
 
         return expression;
+    }
+
+    private BinaryOperator ParseBinaryOperator()
+    {
+        var token = TakeToken();
+
+        BinaryOperator binaryOperator = token switch
+        {
+            Plus => new Add(),
+            Minus => new Subtract(),
+            Star => new Multiply(),
+            Slash => new Divide(),
+            Percent => new Modulo(),
+            Ampersand => new BitwiseAnd(),
+            Pipe => new BitwiseOr(),
+            Hat => new BitwiseXor(),
+            LessLess => new LeftShift(),
+            GreaterGreater => new RightShift(),
+            _ => throw new Exception($"Expected a binary operator but found a {token}")
+        };
+
+        return binaryOperator;
     }
 
     private UnaryOperator ParseUnaryOperator()
@@ -131,4 +171,15 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
 
         return unaryOperator;
     }
+
+    private static int GetPrecedence(SyntaxToken current) => current switch
+    {
+        Star or Slash or Percent => 50,
+        Plus or Minus => 45,
+        LessLess or GreaterGreater => 40,
+        Ampersand => 25,
+        Hat => 20,
+        Pipe => 15,
+        _ => -1
+    };
 }

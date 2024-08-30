@@ -70,6 +70,43 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
                     return new MinusMinus(CurrentTokenText);
                 }
                 return new Minus(CurrentTokenText);
+            case '+':
+                position++;
+                return new Plus(CurrentTokenText);
+            case '*':
+                position++;
+                return new Star(CurrentTokenText);
+            case '/':
+                position++;
+                return new Slash(CurrentTokenText);
+            case '%':
+                position++;
+                return new Percent(CurrentTokenText);
+            case '&':
+                position++;
+                return new Ampersand(CurrentTokenText);
+            case '|':
+                position++;
+                return new Pipe(CurrentTokenText);
+            case '^':
+                position++;
+                return new Hat(CurrentTokenText);
+            case '<':
+                position++;
+                if (Current == '<')
+                {
+                    position++;
+                    return new LessLess(CurrentTokenText);
+                }
+                break;
+            case '>':
+                position++;
+                if (Current == '>')
+                {
+                    position++;
+                    return new GreaterGreater(CurrentTokenText);
+                }
+                break;
         }
 
         throw new Exception($"Lexer failure: bad character {Current}");

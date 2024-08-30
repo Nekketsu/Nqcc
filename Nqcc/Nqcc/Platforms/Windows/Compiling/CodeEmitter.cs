@@ -1,4 +1,5 @@
 ﻿using Nqcc.Assembly;
+using Nqcc.Assembly.BinaryOperators;
 using Nqcc.Assembly.Instructions;
 using Nqcc.Assembly.Operands;
 using Nqcc.Assembly.Operands.Registers;
@@ -48,6 +49,15 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
             case Unary unary:
                 EmitUnaryInstruction(unary);
                 break;
+            case Binary binary:
+                EmitBinaryInstruction(binary);
+                break;
+            case Idiv idiv:
+                EmitIdivInstruction(idiv);
+                break;
+            case Cdq:
+                EmitCdqInstruction();
+                break;
             case AllocateStack allocateStack:
                 EmitAllocateStackInstruction(allocateStack);
                 break;
@@ -71,10 +81,46 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         writer.WriteLine($"\t{ShowUnaryOperator(unary.Operator)}\t{ShowOperand(unary.Destination)}");
     }
 
+    private void EmitBinaryInstruction(Binary binary)
+    {
+        switch (binary.Operator)
+        {
+            case LeftShift or RightShift:
+                writer.WriteLine($"\t{ShowBinaryOperator(binary.Operator)}\t{ShowOperand(binary.Destination)}, {ShowByteOperand(binary.Source)}");
+                break;
+            default:
+                writer.WriteLine($"\t{ShowBinaryOperator(binary.Operator)}\t{ShowOperand(binary.Destination)}, {ShowOperand(binary.Source)}");
+                break;
+        }
+    }
+
+    private void EmitIdivInstruction(Idiv idiv)
+    {
+        writer.WriteLine($"\tidiv\t{ShowOperand(idiv.Operand)}");
+    }
+
+    private void EmitCdqInstruction()
+    {
+        writer.WriteLine("\tcdq");
+    }
+
     private static string ShowUnaryOperator(UnaryOperator @operator) => @operator switch
     {
         Neg => "neg",
         Not => "not",
+        _ => throw new NotImplementedException()
+    };
+
+    private static string ShowBinaryOperator(BinaryOperator @operator) => @operator switch
+    {
+        Add => "add",
+        Subtract => "sub",
+        Multiply => "imul",
+        BitwiseAnd => "and",
+        BitwiseOr => "or",
+        BitwiseXor => "xor",
+        LeftShift => "sal",
+        RightShift => "sar",
         _ => throw new NotImplementedException()
     };
 
@@ -90,11 +136,22 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         Imm imm => ShowImmOperand(imm),
         _ => throw new NotImplementedException()
     };
+    
+    private static string ShowByteOperand(Operand operand) => operand switch
+    {
+        Register register => ShowByteRegisterOperand(register),
+        Stack stack => ShowByteStackOperand(stack),
+        Imm imm => ShowImmOperand(imm),
+        _ => throw new NotImplementedException()
+    };
 
     private static string ShowRegisterOperand(Register register) => register switch
     {
         AX => "eax",
+        CX => "ecx",
+        DX => "edx",
         R10 => "r10d",
+        R11 => "r11d",
         _ => throw new NotImplementedException()
     };
 
@@ -106,4 +163,21 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
     };
 
     private static string ShowImmOperand(Imm imm) => $"{imm.Value}";
+
+    private static string ShowByteRegisterOperand(Register register) => register switch
+    {
+        AX => "al",
+        CX => "cl",
+        DX => "dl",
+        R10 => "r10b",
+        R11 => "r11b",
+        _ => throw new NotImplementedException()
+    };
+
+    private static string ShowByteStackOperand(Stack stack) => stack.Offset switch
+    {
+        < 0 => $"BYTE PTR [rbp - {-stack.Offset}]",
+        0 => "BYTE PTR [rbp]",
+        > 0 => $"BYTE PTR [rbp + {stack.Offset}]"
+    };
 }
