@@ -1,5 +1,6 @@
 ﻿using Nqcc.Assembly;
 using Nqcc.Assembly.BinaryOperators;
+using Nqcc.Assembly.ConditionCodes;
 using Nqcc.Assembly.Instructions;
 using Nqcc.Assembly.Operands;
 using Nqcc.Assembly.Operands.Registers;
@@ -11,6 +12,11 @@ namespace Nqcc.Platforms.Windows.Compiling;
 public class CodeEmitter(TextWriter writer) : ICodeEmitter
 {
     public void Emit(Program assembly) => EmitProgram(assembly);
+
+    private static string GetLabelName(string name)
+    {
+        return $"L{name.Replace('.', '_')}";
+    }
 
     private void EmitProgram(Program program)
     {
@@ -60,6 +66,21 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
                 break;
             case AllocateStack allocateStack:
                 EmitAllocateStackInstruction(allocateStack);
+                break;
+            case Cmp cmp:
+                EmitCmpInstruction(cmp);
+                break;
+            case Jmp jmp:
+                EmitJmpInstruction(jmp);
+                break;
+            case JmpCc jmp:
+                EmitJmpCcInstruction(jmp);
+                break;
+            case SetCc set:
+                EmitSetCcInstruction(set);
+                break;
+            case Label label:
+                EmitLabelInstruction(label);
                 break;
         }
     }
@@ -129,6 +150,31 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         writer.WriteLine($"\tsub\trsp, {allocateStack.Size}");
     }
 
+    private void EmitCmpInstruction(Cmp cmp)
+    {
+        writer.WriteLine($"\tcmp\t{ShowOperand(cmp.Destination)}, {ShowOperand(cmp.Source)}");
+    }
+
+    private void EmitJmpInstruction(Jmp jmp)
+    {
+        writer.WriteLine($"\tjmp\t{GetLabelName(jmp.Target)}");
+    }
+
+    private void EmitJmpCcInstruction(JmpCc jmp)
+    {
+        writer.WriteLine($"\tj{ShowConditionCode(jmp.ConditionCode)}\t{GetLabelName(jmp.Target)}");
+    }
+
+    private void EmitSetCcInstruction(SetCc set)
+    {
+        writer.WriteLine($"\tset{ShowConditionCode(set.ConditionCode)}\t{ShowByteOperand(set.Operand)}");
+    }
+
+    private void EmitLabelInstruction(Label label)
+    {
+        writer.WriteLine($"{GetLabelName(label.Identifier)}:");
+    }
+
     private static string ShowOperand(Operand operand) => operand switch
     {
         Register register => ShowRegisterOperand(register),
@@ -179,5 +225,16 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         < 0 => $"BYTE PTR [rbp - {-stack.Offset}]",
         0 => "BYTE PTR [rbp]",
         > 0 => $"BYTE PTR [rbp + {stack.Offset}]"
+    };
+
+    private static string ShowConditionCode(ConditionCode conditionCode) => conditionCode switch
+    {
+        E => "e",
+        NE => "ne",
+        L => "l",
+        LE => "le",
+        G => "g",
+        GE => "ge",
+        _ => throw new NotImplementedException()
     };
 }

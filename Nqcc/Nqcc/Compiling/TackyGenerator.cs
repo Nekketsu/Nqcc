@@ -1,5 +1,6 @@
 ﻿using Nqcc.Tacky;
 using Nqcc.Tacky.BinaryOperators;
+using Nqcc.Tacky.BinaryOperators.RelationalOperators;
 using Nqcc.Tacky.Instructions;
 using Nqcc.Tacky.Operands;
 using Nqcc.Tacky.UnaryOperators;
@@ -10,6 +11,7 @@ namespace Nqcc.Compiling;
 public class TackyGenerator(Ast.Program ast)
 {
     private int temporaryCounter = 0;
+    private int labelCounter = 0;
 
     public Program Generate() => EmitProgram(ast);
 
@@ -67,7 +69,58 @@ public class TackyGenerator(Ast.Program ast)
         return destination;
     }
 
-    private Variable EmitBinary(ImmutableArray<Instruction>.Builder builder, Ast.Expressions.Binary binary)
+    private Variable EmitBinary(ImmutableArray<Instruction>.Builder builder, Ast.Expressions.Binary binary) => binary.Operator switch
+    {
+        Ast.BinaryOperators.And => EmitBinaryAnd(builder, binary),
+        Ast.BinaryOperators.Or => EmitBinaryOr(builder, binary),
+        _ => EmitBinaryGeneric(builder, binary)
+    };
+
+    private Variable EmitBinaryAnd(ImmutableArray<Instruction>.Builder builder, Ast.Expressions.Binary binary)
+    {
+        var falseLabel = MakeLabel("and_false");
+        var endLabel = MakeLabel("and_end");
+        var destinationName = MakeTemporary();
+        var destination = new Variable(destinationName);
+
+        var left = EmitExpression(builder, binary.Left);
+        builder.Add(new JumpIfZero(left, falseLabel));
+        var right = EmitExpression(builder, binary.Right);
+        builder.AddRange(
+            new JumpIfZero(right, falseLabel),
+            new Copy(new Constant(1), destination),
+            new Jump(endLabel),
+            new Label(falseLabel),
+            new Copy(new Constant(0), destination),
+            new Label(endLabel)
+        );
+
+        return destination;
+    }
+
+    private Variable EmitBinaryOr(ImmutableArray<Instruction>.Builder builder, Ast.Expressions.Binary binary)
+    {
+        var trueLabel = MakeLabel("or_true");
+        var endLabel = MakeLabel("or_end");
+        var destinationName = MakeTemporary();
+        var destination = new Variable(destinationName);
+
+        var left = EmitExpression(builder, binary.Left);
+        builder.Add(new JumpIfNotZero(left, trueLabel));
+        var right = EmitExpression(builder, binary.Right);
+        builder.AddRange(
+            new JumpIfNotZero(right, trueLabel),
+            new Copy(new Constant(0), destination),
+            new Jump(endLabel),
+            new Label(trueLabel),
+            new Copy(new Constant(1), destination),
+            new Label(endLabel)
+        );
+
+        return destination;
+    }
+
+    private Variable EmitBinaryGeneric(ImmutableArray<Instruction>.Builder builder, Ast.Expressions.Binary binary)
     {
         var left = EmitExpression(builder, binary.Left);
         var right = EmitExpression(builder, binary.Right);
@@ -83,6 +136,7 @@ public class TackyGenerator(Ast.Program ast)
     {
         Ast.UnaryOperators.Complement => new Complement(),
         Ast.UnaryOperators.Negate => new Negate(),
+        Ast.UnaryOperators.Not => new Not(),
         _ => throw new NotImplementedException(),
     };
 
@@ -98,8 +152,17 @@ public class TackyGenerator(Ast.Program ast)
         Ast.BinaryOperators.BitwiseXor => new BitwiseXor(),
         Ast.BinaryOperators.LeftShift => new LeftShift(),
         Ast.BinaryOperators.RightShift => new RightShift(),
+        Ast.BinaryOperators.Equals => new Equals(),
+        Ast.BinaryOperators.NotEquals => new NotEquals(),
+        Ast.BinaryOperators.LessThan => new LessThan(),
+        Ast.BinaryOperators.LessOrEquals => new LessOrEquals(),
+        Ast.BinaryOperators.GreaterThan => new GreaterThan(),
+        Ast.BinaryOperators.GreaterOrEquals => new GreaterOrEquals(),
+        Ast.BinaryOperators.And or Ast.BinaryOperators.Or => throw new Exception("Internal error, cannot convert these directly to TACKY binops"),
         _ => throw new NotImplementedException()
     };
 
     private string MakeTemporary() => $"tmp.{temporaryCounter++}";
+
+    private string MakeLabel(string prefix) => $"{prefix}.{labelCounter++}";
 }

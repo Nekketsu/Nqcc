@@ -7,6 +7,8 @@ public class CodeEmitter(TextWriter writer) : Nqcc.Compiling.CodeEmitter(writer)
         return name;
     }
 
+    protected override string GetLabelName(string name) => $".L{name}";
+
     protected override void EmitStackNote()
     {
         writer.WriteLine("\t.section\t.note.GNU-stack,\"\",@progbits");

@@ -43,6 +43,21 @@ public abstract class TackyNode
             case BinaryOperator binaryOperator:
                 PrettyPrintBinaryOperator(writer, binaryOperator, indent);
                 break;
+            case Jump jump:
+                PrettyPrintJump(writer, jump, indent);
+                break;
+            case JumpIfZero jumpIfZero:
+                PrettyPrintJumpIfZero(writer, jumpIfZero, indent);
+                break;
+            case JumpIfNotZero jumpIfNotZero:
+                PrettyPrintJumpIfNotZero(writer, jumpIfNotZero, indent);
+                break;
+            case Copy copy:
+                PrettyPrintCopy(writer, indent, copy);
+                break;
+            case Label label:
+                PrettyPrintLabel(writer, label, indent);
+                break;
         }
     }
 
@@ -105,6 +120,7 @@ public abstract class TackyNode
         {
             Complement => "~",
             Negate => "-",
+            Not => "!",
             _ => throw new NotImplementedException()
         };
 
@@ -125,10 +141,48 @@ public abstract class TackyNode
             BitwiseXor => "^",
             LeftShift => "<<",
             RightShift => ">>",
+            BinaryOperators.RelationalOperators.Equals => "==",
+            BinaryOperators.RelationalOperators.NotEquals => "!=",
+            BinaryOperators.RelationalOperators.LessThan => "<",
+            BinaryOperators.RelationalOperators.LessOrEquals => "<=",
+            BinaryOperators.RelationalOperators.GreaterThan => ">",
+            BinaryOperators.RelationalOperators.GreaterOrEquals => ">=",
             _ => throw new NotImplementedException()
         };
 
         Write(writer, operatorText, indent);
+    }
+
+    private static void PrettyPrintJump(TextWriter writer, Jump jump, int indent)
+    {
+        WriteLine(writer, $"Jump({jump.Target})", indent);
+    }
+
+    private static void PrettyPrintJumpIfZero(TextWriter writer, JumpIfZero jumpIfZero, int indent)
+    {
+        Write(writer, "JumpIfZero(", indent);
+        jumpIfZero.Condition.PrettyPrint(writer, 0);
+        WriteLine(writer, $", {jumpIfZero.Target})", 0);
+    }
+
+    private static void PrettyPrintJumpIfNotZero(TextWriter writer, JumpIfNotZero jumpIfNotZero, int indent)
+    {
+        Write(writer, "JumpIfNotZero(", indent);
+        jumpIfNotZero.Condition.PrettyPrint(writer, 0);
+        WriteLine(writer, $", {jumpIfNotZero.Target})", 0);
+    }
+
+    private static void PrettyPrintCopy(TextWriter writer, int indent, Copy copy)
+    {
+        copy.Destination.PrettyPrint(writer, indent);
+        Write(writer, " = ", 0);
+        copy.Source.PrettyPrint(writer, 0);
+        WriteLine(writer, "", 0);
+    }
+
+    private static void PrettyPrintLabel(TextWriter writer, Label label, int indent)
+    {
+        WriteLine(writer, $"{label.Identifier}:", indent);
     }
 
     private static void WriteLine(TextWriter writer, string text, int indent)

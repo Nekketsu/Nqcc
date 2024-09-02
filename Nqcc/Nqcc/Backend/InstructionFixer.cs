@@ -45,6 +45,8 @@ public class InstructionFixer(Program tacky, int lastStackSlot)
         Binary { Operator: Add or Subtract or BitwiseAnd or BitwiseOr or BitwiseXor, Source: Stack, Destination: Stack } binary => FixUpBinaryMemoryToMemoryInstrution(binary),
         Binary { Operator: LeftShift or RightShift, Source: Stack or Register } shift => FixShiftInstruction(shift),
         Binary { Operator: Multiply, Destination: Stack } multiply => FixUpMultiplyMemoryInstruction(multiply),
+        Cmp { Source: Stack, Destination: Stack } cmp => FixUpCmpMemoryToMemoryInstruction(cmp),
+        Cmp { Destination: Imm } cmp => FixUpCmpImmediateInstruction(cmp),
         _ => [instruction]
     };
 
@@ -77,5 +79,17 @@ public class InstructionFixer(Program tacky, int lastStackSlot)
         new Mov(multiply.Destination, new R11()),
         new Binary(new Multiply(), multiply.Source, new R11()),
         new Mov(new R11(), multiply.Destination)
+    ];
+
+    private static Instruction[] FixUpCmpMemoryToMemoryInstruction(Cmp cmp) =>
+    [
+        new Mov(cmp.Source, new R10()),
+        new Cmp(new R10(), cmp.Destination)
+    ];
+
+    private static Instruction[] FixUpCmpImmediateInstruction(Cmp cmp) =>
+    [
+        new Mov(cmp.Destination, new R11()),
+        new Cmp(cmp.Source, new R11())
     ];
 }

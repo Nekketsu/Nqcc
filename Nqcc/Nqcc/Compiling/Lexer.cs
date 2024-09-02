@@ -84,27 +84,63 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
                 return new Percent(CurrentTokenText);
             case '&':
                 position++;
+                if (Current == '&')
+                {
+                    position++;
+                    return new AmpersandAmpersand(CurrentTokenText);
+                }
                 return new Ampersand(CurrentTokenText);
             case '|':
                 position++;
+                if (Current == '|')
+                {
+                    position++;
+                    return new PipePipe(CurrentTokenText);
+                }
                 return new Pipe(CurrentTokenText);
             case '^':
                 position++;
                 return new Hat(CurrentTokenText);
             case '<':
                 position++;
-                if (Current == '<')
+                switch (Current)
                 {
-                    position++;
-                    return new LessLess(CurrentTokenText);
+                    case '<':
+                        position++;
+                        return new LessLess(CurrentTokenText);
+                    case '=':
+                        position++;
+                        return new LessOrEquals(CurrentTokenText);
+                    default:
+                        return new Less(CurrentTokenText);
                 }
-                break;
             case '>':
                 position++;
-                if (Current == '>')
+                switch (Current)
+                {
+                    case '>':
+                        position++;
+                        return new GreaterGreater(CurrentTokenText);
+                    case '=':
+                        position++;
+                        return new GreaterOrEquals(CurrentTokenText);
+                    default:
+                        return new Greater(CurrentTokenText);
+                }
+            case '!':
+                position++;
+                if (Current == '=')
                 {
                     position++;
-                    return new GreaterGreater(CurrentTokenText);
+                    return new BangEquals(CurrentTokenText);
+                }
+                return new Bang(CurrentTokenText);
+            case '=':
+                position++;
+                if (Current == '=')
+                {
+                    position++;
+                    return new EqualsEquals(CurrentTokenText);
                 }
                 break;
         }

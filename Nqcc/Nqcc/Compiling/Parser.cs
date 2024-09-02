@@ -107,7 +107,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
     private Expression ParseFactor() => Current switch
     {
         Lex.Constant => ParseConstantExpression(),
-        Tilde or Minus => ParseUnaryExpression(),
+        Tilde or Minus or Bang => ParseUnaryExpression(),
         OpenParenthesis => ParseParenthesizedExpression(),
         _ => throw new Exception($"Expected an expression but found \"{Current}\""),
     };
@@ -152,6 +152,14 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
             Hat => new BitwiseXor(),
             LessLess => new LeftShift(),
             GreaterGreater => new RightShift(),
+            AmpersandAmpersand => new And(),
+            PipePipe => new Or(),
+            EqualsEquals => new Equals(),
+            BangEquals => new NotEquals(),
+            Less => new LessThan(),
+            Lex.LessOrEquals => new Ast.BinaryOperators.LessOrEquals(),
+            Greater => new GreaterThan(),
+            Lex.GreaterOrEquals => new Ast.BinaryOperators.GreaterOrEquals(),
             _ => throw new Exception($"Expected a binary operator but found a {token}")
         };
 
@@ -166,6 +174,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         {
             Tilde => new Complement(),
             Minus => new Negate(),
+            Bang => new Not(),
             _ => throw new Exception($"Expected a unary operator but found a {token}")
         };
 
@@ -177,9 +186,13 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         Star or Slash or Percent => 50,
         Plus or Minus => 45,
         LessLess or GreaterGreater => 40,
+        Less or Lex.LessOrEquals or Greater or Lex.GreaterOrEquals => 35,
+        EqualsEquals or BangEquals => 30,
         Ampersand => 25,
         Hat => 20,
         Pipe => 15,
+        AmpersandAmpersand => 10,
+        PipePipe => 5,
         _ => -1
     };
 }

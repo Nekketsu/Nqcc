@@ -1,5 +1,6 @@
 ﻿using Nqcc.Assembly;
 using Nqcc.Assembly.BinaryOperators;
+using Nqcc.Assembly.ConditionCodes;
 using Nqcc.Assembly.Instructions;
 using Nqcc.Assembly.Operands;
 using Nqcc.Assembly.Operands.Registers;
@@ -41,6 +42,11 @@ public class TackyToAssemblyConverter(Tacky.Program tacky)
         Tacky.Instructions.Return @return => ConvertReturnInstruction(@return),
         Tacky.Instructions.Unary unary => ConvertUnaryInstruction(unary),
         Tacky.Instructions.Binary binary => ConvertBinaryInstruction(binary),
+        Tacky.Instructions.Jump jump => ConvertJumpInstruction(jump),
+        Tacky.Instructions.JumpIfZero jumpIfZero => ConvertJumpIfZeroInstruction(jumpIfZero),
+        Tacky.Instructions.JumpIfNotZero jumpIfNotZero => ConvertJumpIfNotZeroInstruction(jumpIfNotZero),
+        Tacky.Instructions.Copy copy => ConvertCopyInstruction(copy),
+        Tacky.Instructions.Label label => ConvertLabelInstruction(label),
         _ => throw new NotImplementedException()
     };
 
@@ -57,15 +63,27 @@ public class TackyToAssemblyConverter(Tacky.Program tacky)
 
     private static Instruction[] ConvertUnaryInstruction(Tacky.Instructions.Unary unary)
     {
-        var @operator = ConvertUnaryOperator(unary.Operator);
         var source = ConvertOperand(unary.Source);
         var destination = ConvertOperand(unary.Destination);
 
-        return
-        [
-            new Mov(source, destination),
-            new Unary(@operator, destination)
-        ];
+        switch (unary.Operator)
+        {
+            case Tacky.UnaryOperators.Not:
+                return
+                [
+                    new Cmp(new Imm(0), source),
+                    new Mov(new Imm(0), destination),
+                    new SetCc(new E(), destination)
+                ];
+            default:
+                var @operator = ConvertUnaryOperator(unary.Operator);
+
+                return
+                [
+                    new Mov(source, destination),
+                    new Unary(@operator, destination)
+                ];
+        }
     }
 
     private static Instruction[] ConvertBinaryInstruction(Tacky.Instructions.Binary binary)
@@ -85,6 +103,14 @@ public class TackyToAssemblyConverter(Tacky.Program tacky)
                     new Idiv(right),
                     new Mov(resultRegister, destination)
                 ];
+            case Tacky.BinaryOperators.RelationalOperator relationOperator:
+                var conditionCode = ConvertConditionCode(relationOperator);
+                return
+                [
+                    new Cmp(right, left),
+                    new Mov(new Imm(0), destination),
+                    new SetCc(conditionCode, destination)
+                ];
             default:
                 var binaryOperator = ConvertBinaryOperator(binary.Operator);
                 return
@@ -94,6 +120,47 @@ public class TackyToAssemblyConverter(Tacky.Program tacky)
                 ];
         }
     }
+
+    private static Instruction[] ConvertJumpInstruction(Tacky.Instructions.Jump jump) =>
+    [
+        new Jmp(jump.Target)
+    ];
+
+    private static Instruction[] ConvertJumpIfZeroInstruction(Tacky.Instructions.JumpIfZero jumpIfZero)
+    {
+        var condition = ConvertOperand(jumpIfZero.Condition);
+
+        return [
+            new Cmp(new Imm(0), condition),
+            new JmpCc(new E(), jumpIfZero.Target)
+        ];
+    }
+
+    private static Instruction[] ConvertJumpIfNotZeroInstruction(Tacky.Instructions.JumpIfNotZero jumpIfNotZero)
+    {
+        var condition = ConvertOperand(jumpIfNotZero.Condition);
+
+        return [
+            new Cmp(new Imm(0), condition),
+            new JmpCc(new NE(), jumpIfNotZero.Target)
+        ];
+    }
+
+    private static Instruction[] ConvertCopyInstruction(Tacky.Instructions.Copy copy)
+    {
+        var source = ConvertOperand(copy.Source);
+        var destination = ConvertOperand(copy.Destination);
+
+        return
+        [
+            new Mov(source, destination)
+        ];
+    }
+
+    private static Instruction[] ConvertLabelInstruction(Tacky.Instructions.Label label) =>
+    [
+        new Label(label.Identifier)
+    ];
 
     private static UnaryOperator ConvertUnaryOperator(Tacky.UnaryOperator @operator) => @operator switch
     {
@@ -121,5 +188,16 @@ public class TackyToAssemblyConverter(Tacky.Program tacky)
         Tacky.Operands.Constant constant => new Imm(constant.Value),
         Tacky.Operands.Variable variable => new PseudoRegister(variable.Identifier),
         _ => throw new NotImplementedException(),
+    };
+
+    private static ConditionCode ConvertConditionCode(Tacky.BinaryOperators.RelationalOperator relationOperator) => relationOperator switch
+    {
+        Tacky.BinaryOperators.RelationalOperators.Equals => new E(),
+        Tacky.BinaryOperators.RelationalOperators.NotEquals => new NE(),
+        Tacky.BinaryOperators.RelationalOperators.GreaterThan => new G(),
+        Tacky.BinaryOperators.RelationalOperators.GreaterOrEquals => new GE(),
+        Tacky.BinaryOperators.RelationalOperators.LessThan => new L(),
+        Tacky.BinaryOperators.RelationalOperators.LessOrEquals => new LE(),
+        _ => throw new NotImplementedException()
     };
 }
