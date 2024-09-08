@@ -1,7 +1,9 @@
-﻿namespace Nqcc.Ast;
+﻿using System.Collections.Immutable;
 
-public class Function(string name, Statement body) : SyntaxNode
+namespace Nqcc.Ast;
+
+public class Function(string name, ImmutableArray<BlockItem> body) : SyntaxNode
 {
     public string Name { get; } = name;
-    public Statement Body { get; } = body;
+    public ImmutableArray<BlockItem> Body { get; } = body;
 }

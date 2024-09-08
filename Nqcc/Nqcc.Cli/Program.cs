@@ -14,6 +14,7 @@ var sourceArgument = new Argument<string>("source", "Source File");
 
 var lexOption = new Option<bool>("--lex", "Run the lexer");
 var parseOption = new Option<bool>("--parse", "Run the lexer and parser");
+var validateOption = new Option<bool>("--validate", "Run the lexer, parser, and semantic analysis");
 var tackyOption = new Option<bool>("--tacky", "Run the lexer, parser, and tacky generator");
 var codegenOption = new Option<bool>("--codegen", "Run through code generation but stop befor emitting assembly");
 var assemblyOption = new Option<bool>(["-s", "-S"], "Stop before assembling (keep assembly file)");
@@ -27,6 +28,7 @@ var rootCommand = new RootCommand("A not-quite-C compiler")
     sourceArgument,
     lexOption,
     parseOption,
+    validateOption,
     tackyOption,
     codegenOption,
     assemblyOption,
@@ -38,6 +40,7 @@ rootCommand.AddValidator(result =>
 {
     if (result.Children.Count(c => c.Symbol == lexOption ||
                                    c.Symbol == parseOption ||
+                                   c.Symbol == validateOption ||
                                    c.Symbol == tackyOption ||
                                    c.Symbol == codegenOption ||
                                    c.Symbol == assemblyOption) > 1)
@@ -46,19 +49,31 @@ rootCommand.AddValidator(result =>
     }
 });
 
-rootCommand.SetHandler(async (source, lex, parse, tacky, codegen, assembly, target, debug) =>
+rootCommand.SetHandler(async context =>
 {
+    var source = context.ParseResult.GetValueForArgument(sourceArgument);
+    var lex = context.ParseResult.GetValueForOption(lexOption);
+    var parse = context.ParseResult.GetValueForOption(parseOption);
+    var validate = context.ParseResult.GetValueForOption(validateOption);
+    var tacky = context.ParseResult.GetValueForOption(tackyOption);
+    var codegen = context.ParseResult.GetValueForOption(codegenOption);
+    var assembly = context.ParseResult.GetValueForOption(assemblyOption);
+    var target = context.ParseResult.GetValueForOption(targetOption);
+    var debug = context.ParseResult.GetValueForOption(debugOption);
+
     var stage = lex
         ? Stage.Lex
         : parse
             ? Stage.Parse
-            : tacky
-                ? Stage.Tacky
-                : codegen
-                    ? Stage.Codegen
-                    : assembly
-                        ? Stage.Assembly
-                        : Stage.Executable;
+            : validate
+                ? Stage.Validate
+                : tacky
+                    ? Stage.Tacky
+                    : codegen
+                        ? Stage.Codegen
+                        : assembly
+                            ? Stage.Assembly
+                            : Stage.Executable;
 
     var settings = new Settings
     {
@@ -84,7 +99,7 @@ rootCommand.SetHandler(async (source, lex, parse, tacky, codegen, assembly, targ
         Console.Error.WriteLine(e.Message);
         throw;
     }
-}, sourceArgument, lexOption, parseOption, tackyOption, codegenOption, assemblyOption, targetOption, debugOption);
+});
 
 await rootCommand.InvokeAsync(args);
 

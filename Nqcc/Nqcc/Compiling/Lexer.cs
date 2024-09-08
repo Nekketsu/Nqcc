@@ -64,42 +64,83 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
                 return new Tilde(CurrentTokenText);
             case '-':
                 position++;
-                if (Current == '-')
+                switch (Current)
                 {
-                    position++;
-                    return new MinusMinus(CurrentTokenText);
+                    case '-':
+                        position++;
+                        return new MinusMinus(CurrentTokenText);
+                    case '=':
+                        position++;
+                        return new MinusEquals(CurrentTokenText);
                 }
                 return new Minus(CurrentTokenText);
             case '+':
                 position++;
+                switch (Current)
+                {
+                    case '+':
+                        position++;
+                        return new PlusPlus(CurrentTokenText);
+                    case '=':
+                        position++;
+                        return new PlusEquals(CurrentTokenText);
+                }
                 return new Plus(CurrentTokenText);
             case '*':
                 position++;
+                if (Current == '=')
+                {
+                    position++;
+                    return new StarEquals(CurrentTokenText);
+                }
                 return new Star(CurrentTokenText);
             case '/':
                 position++;
+                if (Current == '=')
+                {
+                    position++;
+                    return new SlashEquals(CurrentTokenText);
+                }
                 return new Slash(CurrentTokenText);
             case '%':
                 position++;
+                if (Current == '=')
+                {
+                    position++;
+                    return new PercentEquals(CurrentTokenText);
+                }
                 return new Percent(CurrentTokenText);
             case '&':
                 position++;
-                if (Current == '&')
+                switch (Current)
                 {
-                    position++;
-                    return new AmpersandAmpersand(CurrentTokenText);
+                    case '&':
+                        position++;
+                        return new AmpersandAmpersand(CurrentTokenText);
+                    case '=':
+                        position++;
+                        return new AmpersandEquals(CurrentTokenText);
                 }
                 return new Ampersand(CurrentTokenText);
             case '|':
                 position++;
-                if (Current == '|')
+                switch (Current)
                 {
-                    position++;
-                    return new PipePipe(CurrentTokenText);
+                    case '|':
+                        position++;
+                        return new PipePipe(CurrentTokenText);
+                    case '=':
+                        position++;
+                        return new PipeEquals(CurrentTokenText);
                 }
                 return new Pipe(CurrentTokenText);
             case '^':
                 position++;
+                if (Current == '=')
+                {
+                    position++;
+                    return new HatEquals(CurrentTokenText);
+                }
                 return new Hat(CurrentTokenText);
             case '<':
                 position++;
@@ -107,26 +148,34 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
                 {
                     case '<':
                         position++;
+                        if (Current == '=')
+                        {
+                            position++;
+                            return new LessLessEquals(CurrentTokenText);
+                        }
                         return new LessLess(CurrentTokenText);
                     case '=':
                         position++;
                         return new LessOrEquals(CurrentTokenText);
-                    default:
-                        return new Less(CurrentTokenText);
                 }
+                return new Less(CurrentTokenText);
             case '>':
                 position++;
                 switch (Current)
                 {
                     case '>':
                         position++;
+                        if (Current == '=')
+                        {
+                            position++;
+                            return new GreaterGreaterEquals(CurrentTokenText);
+                        }
                         return new GreaterGreater(CurrentTokenText);
                     case '=':
                         position++;
                         return new GreaterOrEquals(CurrentTokenText);
-                    default:
-                        return new Greater(CurrentTokenText);
                 }
+                return new Greater(CurrentTokenText);
             case '!':
                 position++;
                 if (Current == '=')
@@ -142,7 +191,7 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
                     position++;
                     return new EqualsEquals(CurrentTokenText);
                 }
-                break;
+                return new Equals(CurrentTokenText);
         }
 
         throw new Exception($"Lexer failure: bad character {Current}");

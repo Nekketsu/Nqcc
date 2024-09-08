@@ -1,4 +1,5 @@
 ﻿using Nqcc.Backend;
+using Nqcc.Compiling.SemanticAnalysis;
 using System.Collections.Immutable;
 
 namespace Nqcc.Compiling;
@@ -20,9 +21,14 @@ public abstract class Compiler : ICompiler
         var parser = new Parser(tokens);
         var ast = parser.Parse();
 
+        if (stage < Stage.Validate) { return assemblyFile; }
+
+        var resolver = new Resolver(ast);
+        var resolvedAst = resolver.Resolve();
+
         if (stage < Stage.Tacky) { return assemblyFile; }
 
-        var tackyGenerator = new TackyGenerator(ast);
+        var tackyGenerator = new TackyGenerator(resolvedAst);
         var tacky = tackyGenerator.Generate();
 
         if (stage < Stage.Codegen) { return assemblyFile; }

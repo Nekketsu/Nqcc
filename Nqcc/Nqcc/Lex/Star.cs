@@ -2,5 +2,4 @@
 
 public class Star(string text) : SyntaxToken(text)
 {
-
 }
