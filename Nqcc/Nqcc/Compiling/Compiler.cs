@@ -23,12 +23,12 @@ public abstract class Compiler : ICompiler
 
         if (stage < Stage.Validate) { return assemblyFile; }
 
-        var resolver = new Resolver(ast);
-        var resolvedAst = resolver.Resolve();
+        var semanticAnalyzer = new SemanticAnalyzer(ast);
+        var analyzedAst = semanticAnalyzer.Analyze();
 
         if (stage < Stage.Tacky) { return assemblyFile; }
 
-        var tackyGenerator = new TackyGenerator(resolvedAst);
+        var tackyGenerator = new TackyGenerator(analyzedAst);
         var tacky = tackyGenerator.Generate();
 
         if (stage < Stage.Codegen) { return assemblyFile; }

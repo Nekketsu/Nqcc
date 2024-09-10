@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 
 namespace Nqcc.Compiling.SemanticAnalysis;
 
-public class Resolver(Program ast)
+public class VariableResolver(Program ast)
 {
     private readonly Dictionary<string, string> variableMap = [];
 
@@ -42,6 +42,8 @@ public class Resolver(Program ast)
     {
         Ast.Statements.Return @return => new Ast.Statements.Return(ResolveExpression(@return.Expression)),
         Ast.Statements.Expression expression => new Ast.Statements.Expression(ResolveExpression(expression.InnerExpression)),
+        Ast.Statements.If @if => new Ast.Statements.If(ResolveExpression(@if.Condition), ResolveStatement(@if.Then), @if.Else is null ? null : ResolveStatement(@if.Else)),
+        Ast.Statements.Label label => new Ast.Statements.Label(label.Name, ResolveStatement(label.Statement)),
         _ => statement
     };
 
@@ -80,6 +82,8 @@ public class Resolver(Program ast)
 
         Postfix { Expression: Variable } postfix => new Postfix(ResolveExpression(postfix.Expression), postfix.Operator),
         Postfix => throw new Exception("Invalid lvalue!"),
+
+        Conditional conditional => new Conditional(ResolveExpression(conditional.Condition), ResolveExpression(conditional.Then), ResolveExpression(conditional.Else)),
 
         _ => expression
     };

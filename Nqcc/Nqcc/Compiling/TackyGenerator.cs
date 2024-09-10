@@ -56,6 +56,15 @@ public class TackyGenerator(Ast.Program ast)
             case Ast.Statements.Expression expression:
                 EmitExpression(builder, expression.InnerExpression);
                 break;
+            case Ast.Statements.If @if:
+                EmitIf(builder, @if);
+                break;
+            case Ast.Statements.Label label:
+                EmitLabel(builder, label);
+                break;
+            case Ast.Statements.Goto @goto:
+                EmitGoto(builder, @goto);
+                break;
             }
     }
 
@@ -73,6 +82,43 @@ public class TackyGenerator(Ast.Program ast)
         builder.Add(new Return(value));
     }
 
+    private static void EmitIf(ImmutableArray<Instruction>.Builder builder, Ast.Statements.If @if)
+    {
+        if (@if.Else is null)
+        {
+            var endLabel = UniqueId.MakeLabel("if_end");
+
+            var condition = EmitExpression(builder, @if.Condition);
+            builder.Add(new JumpIfZero(condition, endLabel));
+            EmitStatement(builder, @if.Then);
+            builder.Add(new Label(endLabel));
+        }
+        else
+        {
+            var elseLabel = UniqueId.MakeLabel("else");
+            var endLabel = UniqueId.MakeLabel("if_end");
+
+            var condition = EmitExpression(builder, @if.Condition);
+            builder.Add(new JumpIfZero(condition, elseLabel));
+            EmitStatement(builder, @if.Then);
+            builder.Add(new Jump(endLabel));
+            builder.Add(new Label(elseLabel));
+            EmitStatement(builder, @if.Else);
+            builder.Add(new Label(endLabel));
+        }
+    }
+
+    private static void EmitLabel(ImmutableArray<Instruction>.Builder builder, Ast.Statements.Label label)
+    {
+        builder.Add(new Label(label.Name));
+        EmitStatement(builder, label.Statement);
+    }
+
+    private static void EmitGoto(ImmutableArray<Instruction>.Builder builder, Ast.Statements.Goto @goto)
+    {
+        builder.Add(new Jump(@goto.Target));
+    }
+
     private static Operand EmitExpression(ImmutableArray<Instruction>.Builder builder, Ast.Expression expression) => expression switch
     {
         Ast.Expressions.Constant constant => EmitConstant(constant),
@@ -83,6 +129,7 @@ public class TackyGenerator(Ast.Program ast)
         Ast.Expressions.Compound compound => EmitCompound(builder, compound),
         Ast.Expressions.Prefix prefix => EmitPrefix(builder, prefix),
         Ast.Expressions.Postfix postfix => EmitPostfix(builder, postfix),
+        Ast.Expressions.Conditional conditional => EmitConditional(builder, conditional),
         _ => throw new NotImplementedException()
     };
 
@@ -165,6 +212,26 @@ public class TackyGenerator(Ast.Program ast)
             default:
                 throw new Exception("Internal error: bad lvalue");
         }
+    }
+
+    private static Variable EmitConditional(ImmutableArray<Instruction>.Builder builder, Ast.Expressions.Conditional conditional)
+    {
+        var elseLabel = UniqueId.MakeLabel("conditional_else");
+        var endLabel = UniqueId.MakeLabel("end");
+        var destinationName = UniqueId.MakeTemporary();
+        var destination = new Variable(destinationName);
+
+        var condition = EmitExpression(builder, conditional.Condition);
+        builder.Add(new JumpIfZero(condition, elseLabel));
+        var thenResult = EmitExpression(builder, conditional.Then);
+        builder.Add(new Copy(thenResult, destination));
+        builder.Add(new Jump(endLabel));
+        builder.Add(new Label(elseLabel));
+        var elseResult = EmitExpression(builder, conditional.Else);
+        builder.Add(new Copy(elseResult, destination));
+        builder.Add(new Label(endLabel));
+
+        return destination;
     }
 
     private static Variable EmitBinaryAnd(ImmutableArray<Instruction>.Builder builder, Ast.Expressions.Binary binary)

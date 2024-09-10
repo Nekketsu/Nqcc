@@ -192,6 +192,12 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
                     return new EqualsEquals(CurrentTokenText);
                 }
                 return new Equals(CurrentTokenText);
+            case '?':
+                position++;
+                return new Question(CurrentTokenText);
+            case ':':
+                position++;
+                return new Colon(CurrentTokenText);
         }
 
         throw new Exception($"Lexer failure: bad character {Current}");
@@ -209,6 +215,9 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
             "int" => new Keywords.Int(CurrentTokenText),
             "void" => new Keywords.Void(CurrentTokenText),
             "return" => new Keywords.Return(CurrentTokenText),
+            "if" => new Keywords.If(CurrentTokenText),
+            "else" => new Keywords.Else(CurrentTokenText),
+            "goto" => new Keywords.Goto(CurrentTokenText),
             _ => new Identifier(CurrentTokenText)
         };
 

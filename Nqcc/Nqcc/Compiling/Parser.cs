@@ -21,6 +21,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
     }
 
     private SyntaxToken Current => Peek(0);
+    private SyntaxToken LookAhead => Peek(1);
 
     private SyntaxToken TakeToken()
     {
@@ -111,7 +112,10 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
     private Statement ParseStatement() => Current switch
     {
         Return => ParseReturnStatement(),
+        If => ParseIfStatement(),
         Semicolon => ParseNullStatement(),
+        Identifier when LookAhead is Colon => ParseLabelStatement(),
+        Goto => ParseGotoStatement(),
         _ => ParseExpressionStatement()
     };
 
@@ -124,11 +128,46 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         return new Ast.Statements.Return(expression);
     }
 
+    private Ast.Statements.If ParseIfStatement()
+    {
+        Expect<If>();
+        Expect<OpenParenthesis>();
+        var condition = ParseExpression();
+        Expect<CloseParenthesis>();
+        var then = ParseStatement();
+        Statement? @else = null;
+        if (Current is Else)
+        {
+            Expect<Else>();
+            @else = ParseStatement();
+        }
+
+        return new Ast.Statements.If(condition, then, @else);
+    }
+
     private Ast.Statements.Null ParseNullStatement()
     {
         Expect<Semicolon>();
 
         return new Ast.Statements.Null();
+    }
+    
+    private Ast.Statements.Label ParseLabelStatement()
+    {
+        var identifier = Expect<Identifier>();
+        Expect<Colon>();
+        var statement = ParseStatement();
+
+        return new Ast.Statements.Label(identifier.Text, statement);
+    }
+
+    private Ast.Statements.Goto ParseGotoStatement()
+    {
+        Expect<Goto>();
+        var identifier = Expect<Identifier>();
+        Expect<Semicolon>();
+
+        return new Ast.Statements.Goto(identifier.Text);
     }
 
     private Ast.Statements.Expression ParseExpressionStatement()
@@ -159,6 +198,15 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
                 var right = ParseExpression(GetPrecedence(Current));
                 left = new Compound(left, compoundAssignmentOperator, right);
             }
+            else if (Current is Question)
+            {
+                var currentPrecedence = GetPrecedence(Current);
+                Expect<Question>();
+                var then = ParseExpression();
+                Expect<Colon>();
+                var @else = ParseExpression(currentPrecedence);
+                left = new Conditional(left, then, @else);
+            }
             else
             {
                 var binaryOperator = ParseBinaryOperator();
@@ -184,7 +232,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
             _ => throw new Exception($"Expected an expression but found \"{Current}\""),
         };
 
-        if (IsPostfixOperator(Current))
+        while (IsPostfixOperator(Current))
         {
             var @operator = ParsePostfixOperator();
             expression = new Postfix(expression, @operator);
@@ -304,6 +352,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         Pipe => 15,
         AmpersandAmpersand => 10,
         PipePipe => 5,
+        Question => 3,
         Lex.Equals or PlusEquals or MinusEquals or StarEquals or SlashEquals or PercentEquals or AmpersandEquals or PipeEquals or HatEquals or LessLessEquals or GreaterGreaterEquals => 1,
         _ => -1
     };
