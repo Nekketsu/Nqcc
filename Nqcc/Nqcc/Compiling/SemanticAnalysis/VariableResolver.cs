@@ -6,7 +6,7 @@ namespace Nqcc.Compiling.SemanticAnalysis;
 
 public class VariableResolver(Program ast)
 {
-    private readonly Dictionary<string, string> variableMap = [];
+    private readonly VariableMap variableMap = new();
 
     public Program Resolve() => ResolveProgram(ast);
 
@@ -19,16 +19,21 @@ public class VariableResolver(Program ast)
 
     private Function ResolveFunction(Function function)
     {
+        var body = ResolveBlock(function.Body);
+
+        return new Function(function.Name, body);
+    }
+
+    private Block ResolveBlock(Block block)
+    {
         var builder = ImmutableArray.CreateBuilder<BlockItem>();
 
-        foreach (var blockItem in function.Body)
+        foreach (var blockItem in block.BlockItems)
         {
             builder.Add(ResolveBlockItem(blockItem));
         }
 
-        var body = builder.ToImmutable();
-
-        return new Function(function.Name, body);
+        return new Block(builder.ToImmutable());
     }
 
     private BlockItem ResolveBlockItem(BlockItem blockItem) => blockItem switch
@@ -42,20 +47,30 @@ public class VariableResolver(Program ast)
     {
         Ast.Statements.Return @return => new Ast.Statements.Return(ResolveExpression(@return.Expression)),
         Ast.Statements.Expression expression => new Ast.Statements.Expression(ResolveExpression(expression.InnerExpression)),
+        Ast.Statements.Compound compound => ResolveCompound(compound),
         Ast.Statements.If @if => new Ast.Statements.If(ResolveExpression(@if.Condition), ResolveStatement(@if.Then), @if.Else is null ? null : ResolveStatement(@if.Else)),
         Ast.Statements.Label label => new Ast.Statements.Label(label.Name, ResolveStatement(label.Statement)),
         _ => statement
     };
 
+    private Ast.Statements.Compound ResolveCompound(Ast.Statements.Compound compound)
+    {
+        variableMap.Push();
+        var block = ResolveBlock(compound.Block);
+        variableMap.Pop();
+
+        return new Ast.Statements.Compound(block);
+    }
+
     private Declaration ResolveDeclaration(Declaration declaration)
     {
-        if (variableMap.ContainsKey(declaration.Name))
+        if (variableMap.Contains(declaration.Name))
         {
             throw new Exception("Duplicate variable declaration!");
         }
 
         var uniqueName = UniqueId.MakeTemporary();
-        variableMap.Add(declaration.Name, uniqueName);
+        variableMap[declaration.Name] = uniqueName;
         var initializer = declaration.Initializer is null
             ? null
             : ResolveExpression(declaration.Initializer);

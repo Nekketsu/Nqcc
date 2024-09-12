@@ -68,16 +68,24 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         Expect<OpenParenthesis>();
         Expect<Lex.Keywords.Void>();
         Expect<CloseParenthesis>();
+        var body = ParseBlock();
+
+        return new Function(name.Text, body);
+    }
+
+    private Block ParseBlock()
+    {
         Expect<OpenBrace>();
-        var body = ImmutableArray.CreateBuilder<BlockItem>();
+        var blockItems = ImmutableArray.CreateBuilder<BlockItem>();
         while (Current is not CloseBrace)
         {
             var blockItem = ParseBlockItem();
-            body.Add(blockItem);
+            blockItems.Add(blockItem);
         }
         Expect<CloseBrace>();
 
-        return new Function(name.Text, body.ToImmutable());
+
+        return new Block(blockItems.ToImmutable());
     }
 
     private BlockItem ParseBlockItem() => Current switch
@@ -116,6 +124,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         Semicolon => ParseNullStatement(),
         Identifier when LookAhead is Colon => ParseLabelStatement(),
         Goto => ParseGotoStatement(),
+        OpenBrace => ParseCompoundStatement(),
         _ => ParseExpressionStatement()
     };
 
@@ -168,6 +177,13 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         Expect<Semicolon>();
 
         return new Ast.Statements.Goto(identifier.Text);
+    }
+
+    private Ast.Statements.Compound ParseCompoundStatement()
+    {
+        var block = ParseBlock();
+
+        return new Ast.Statements.Compound(block);
     }
 
     private Ast.Statements.Expression ParseExpressionStatement()

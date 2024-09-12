@@ -23,14 +23,19 @@ public class TackyGenerator(Ast.Program ast)
     {
         var builder = ImmutableArray.CreateBuilder<Instruction>();
 
-        foreach (var blockItem in function.Body)
-        {
-            EmitBlockItem(builder, blockItem);
-        }
+        EmitBlock(builder, function.Body);
 
         builder.Add(new Return(new Constant(0)));
 
         return new Function(function.Name, builder.ToImmutable());
+    }
+
+    private static void EmitBlock(ImmutableArray<Instruction>.Builder builder, Ast.Block block)
+    {
+        foreach (var blockItem in block.BlockItems)
+        {
+            EmitBlockItem(builder, blockItem);
+        }
     }
 
     private static void EmitBlockItem(ImmutableArray<Instruction>.Builder builder, Ast.BlockItem blockItem)
@@ -64,6 +69,9 @@ public class TackyGenerator(Ast.Program ast)
                 break;
             case Ast.Statements.Goto @goto:
                 EmitGoto(builder, @goto);
+                break;
+            case Ast.Statements.Compound compound:
+                EmitCompound(builder, compound);
                 break;
             }
     }
@@ -117,6 +125,11 @@ public class TackyGenerator(Ast.Program ast)
     private static void EmitGoto(ImmutableArray<Instruction>.Builder builder, Ast.Statements.Goto @goto)
     {
         builder.Add(new Jump(@goto.Target));
+    }
+
+    private static void EmitCompound(ImmutableArray<Instruction>.Builder builder, Ast.Statements.Compound compound)
+    {
+        EmitBlock(builder, compound.Block);
     }
 
     private static Operand EmitExpression(ImmutableArray<Instruction>.Builder builder, Ast.Expression expression) => expression switch

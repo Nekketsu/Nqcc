@@ -25,7 +25,13 @@ public class LabelAnalyzer(Program ast)
 
     private void AnalyzeFunction(Function function)
     {
-        foreach (var blockItem in function.Body)
+        AnalyzeBlock(function.Body);
+        
+    }
+
+    private void AnalyzeBlock(Block block)
+    {
+        foreach (var blockItem in block.BlockItems)
         {
             AnalyzeBlockItem(blockItem);
         }
@@ -52,6 +58,9 @@ public class LabelAnalyzer(Program ast)
             case If @if:
                 AnalyzeIf(@if);
                 break;
+            case Compound compound:
+                AnalyzeCompound(compound);
+                break;
         }
     }
 
@@ -77,5 +86,10 @@ public class LabelAnalyzer(Program ast)
         {
             AnalyzeStatement(@if.Else);
         }
+    }
+
+    private void AnalyzeCompound(Compound compound)
+    {
+        AnalyzeBlock(compound.Block);
     }
 }
