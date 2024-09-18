@@ -109,6 +109,12 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         return new Declaration(name.Text, initializer);
     }
 
+    private ForInit ParseForInit() => Current switch
+    {
+        Int => new Ast.ForInits.InitDeclaration(ParseDeclaration()),
+        _ => new Ast.ForInits.InitExpression(ParseOptionalExpression<Semicolon>())
+    };
+
     private Expression ParseInitializer()
     {
         var initializer = ParseExpression();
@@ -125,6 +131,14 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         Identifier when LookAhead is Colon => ParseLabelStatement(),
         Goto => ParseGotoStatement(),
         OpenBrace => ParseCompoundStatement(),
+        Break => ParseBreakStatement(),
+        Continue => ParseContinueStatement(),
+        While => ParseWhileStatement(),
+        Do => ParseDoWhileStatement(),
+        For => ParseForStatement(),
+        Switch => ParseSwitchStatement(),
+        Case => ParseCaseStatement(),
+        Default => ParseDefaultStatement(),
         _ => ParseExpressionStatement()
     };
 
@@ -184,6 +198,99 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         var block = ParseBlock();
 
         return new Ast.Statements.Compound(block);
+    }
+
+    private Ast.Statements.Break ParseBreakStatement()
+    {
+        Expect<Break>();
+        Expect<Semicolon>();
+
+        return new Ast.Statements.Break();
+    }
+
+    private Ast.Statements.Continue ParseContinueStatement()
+    {
+        Expect<Continue>();
+        Expect<Semicolon>();
+
+        return new Ast.Statements.Continue();
+    }
+
+    private Ast.Statements.While ParseWhileStatement()
+    {
+        Expect<While>();
+        Expect<OpenParenthesis>();
+        var condition = ParseExpression();
+        Expect<CloseParenthesis>();
+        var body = ParseStatement();
+
+        return new Ast.Statements.While(condition, body);
+    }
+
+    private Ast.Statements.DoWhile ParseDoWhileStatement()
+    {
+        Expect<Do>();
+        var body = ParseStatement();
+        Expect<While>();
+        Expect<OpenParenthesis>();
+        var condition = ParseExpression();
+        Expect<CloseParenthesis>();
+        Expect<Semicolon>();
+
+        return new Ast.Statements.DoWhile(body, condition);
+    }
+
+    private Ast.Statements.For ParseForStatement()
+    {
+        Expect<For>();
+        Expect<OpenParenthesis>();
+        var init = ParseForInit();
+        var condition = ParseOptionalExpression<Semicolon>();
+        var post = ParseOptionalExpression<CloseParenthesis>();
+        var body = ParseStatement();
+
+        return new Ast.Statements.For(init, condition, post, body);
+    }
+
+    private Expression? ParseOptionalExpression<T>() where T : SyntaxToken
+    {
+        var expression = Current is T
+            ? null
+            : ParseExpression();
+
+        Expect<T>();
+
+        return expression;
+    }
+
+    private Ast.Statements.Switch ParseSwitchStatement()
+    {
+        Expect<Switch>();
+        Expect<OpenParenthesis>();
+        var condition = ParseExpression();
+        Expect<CloseParenthesis>();
+        var body = ParseStatement();
+
+        return new Ast.Statements.Switch(condition, body);
+    }
+
+    private Ast.Statements.Case ParseCaseStatement()
+    {
+        Expect<Case>();
+        var condition = ParseExpression();
+        Expect<Colon>();
+        var statement = ParseStatement();
+
+        return new Ast.Statements.Case(condition, statement);
+    }
+
+    private Ast.Statements.Default ParseDefaultStatement()
+    {
+        Expect<Default>();
+        Expect<Colon>();
+        var statement = ParseStatement();
+
+        return new Ast.Statements.Default(statement);
     }
 
     private Ast.Statements.Expression ParseExpressionStatement()

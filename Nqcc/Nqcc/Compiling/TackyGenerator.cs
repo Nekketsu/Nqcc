@@ -73,6 +73,30 @@ public class TackyGenerator(Ast.Program ast)
             case Ast.Statements.Compound compound:
                 EmitCompound(builder, compound);
                 break;
+            case Ast.Statements.Break @break:
+                EmitBreak(builder, @break);
+                break;
+            case Ast.Statements.Continue @continue:
+                EmitContinue(builder, @continue);
+                break;
+            case Ast.Statements.DoWhile doWhile:
+                EmitDoWhile(builder, doWhile);
+                break;
+            case Ast.Statements.While @while:
+                EmitWhile(builder, @while);
+                break;
+            case Ast.Statements.For @for:
+                EmitFor(builder, @for);
+                break;
+            case Ast.Statements.Switch @switch:
+                EmitSwitch(builder, @switch);
+                break;
+            case Ast.Statements.Case @case:
+                EmitCase(builder, @case);
+                break;
+            case Ast.Statements.Default @default:
+                EmitDefault(builder, @default);
+                break;
             }
     }
 
@@ -131,6 +155,118 @@ public class TackyGenerator(Ast.Program ast)
     {
         EmitBlock(builder, compound.Block);
     }
+
+    private static void EmitBreak(ImmutableArray<Instruction>.Builder builder, Ast.Statements.Break @break)
+    {
+        builder.Add(new Jump(BreakLabel(@break.Label)));
+    }
+
+    private static void EmitContinue(ImmutableArray<Instruction>.Builder builder, Ast.Statements.Continue @continue)
+    {
+        builder.Add(new Jump(ContinueLabel(@continue.Label)));
+    }
+
+    private static void EmitDoWhile(ImmutableArray<Instruction>.Builder builder, Ast.Statements.DoWhile doWhile)
+    {
+        var startLabel = StartLabel(doWhile.Label);
+        var continueLabel = ContinueLabel(doWhile.Label);
+        var breakLabel = BreakLabel(doWhile.Label);
+
+        builder.Add(new Label(startLabel));
+        EmitStatement(builder, doWhile.Body);
+        builder.Add(new Label(continueLabel));
+        var condition = EmitExpression(builder, doWhile.Condition);
+        builder.Add(new JumpIfNotZero(condition, startLabel));
+        builder.Add(new Label(breakLabel));
+    }
+
+    private static void EmitWhile(ImmutableArray<Instruction>.Builder builder, Ast.Statements.While @while)
+    {
+        var continueLabel = ContinueLabel(@while.Label);
+        var breakLabel = BreakLabel(@while.Label);
+
+        builder.Add(new Label(continueLabel));
+        var condition = EmitExpression(builder, @while.Condition);
+        builder.Add(new JumpIfZero(condition, breakLabel));
+        EmitStatement(builder, @while.Body);
+        builder.Add(new Jump(continueLabel));
+        builder.Add(new Label(breakLabel));
+    }
+
+    private static void EmitFor(ImmutableArray<Instruction>.Builder builder, Ast.Statements.For @for)
+    {
+        var startLabel = StartLabel(@for.Label);
+        var continueLabel = ContinueLabel(@for.Label);
+        var breakLabel = BreakLabel(@for.Label);
+
+        EmitForInit(builder, @for.Init);
+        builder.Add(new Label(startLabel));
+        if (@for.Condition is not null)
+        {
+            var condition = EmitExpression(builder, @for.Condition);
+            builder.Add(new JumpIfZero(condition, breakLabel));
+        }
+        EmitStatement(builder, @for.Body);
+        builder.Add(new Label(continueLabel));
+        if (@for.Post is not null)
+        {
+            EmitExpression(builder, @for.Post);
+        }
+        builder.Add(new Jump(startLabel));
+        builder.Add(new Label(breakLabel));
+    }
+
+    private static void EmitSwitch(ImmutableArray<Instruction>.Builder builder, Ast.Statements.Switch @switch)
+    {
+        var breakLabel = BreakLabel(@switch.Label);
+        var destinationName = UniqueId.MakeTemporary();
+
+        var destination = new Variable(destinationName);
+        var left = EmitExpression(builder, @switch.Condition);
+
+        foreach (var @case in @switch.Cases)
+        {
+            var right = EmitExpression(builder, @case.Condition);
+            var compare = new Binary(left, new Equals(), right, destination);
+            builder.Add(compare);
+            builder.Add(new JumpIfNotZero(destination, @case.Label));
+        }
+
+        if (@switch.Default is not null)
+        {
+            builder.Add(new Jump(@switch.Default.Label));
+        }
+
+        builder.Add(new Jump(breakLabel));
+
+        EmitStatement(builder, @switch.Body);
+        builder.Add(new Label(breakLabel));
+    }
+
+    private static void EmitCase(ImmutableArray<Instruction>.Builder builder, Ast.Statements.Case @case)
+    {
+        builder.Add(new Label(@case.Label));
+        EmitStatement(builder, @case.Statement);
+    }
+
+    private static void EmitDefault(ImmutableArray<Instruction>.Builder builder, Ast.Statements.Default @default)
+    {
+        builder.Add(new Label(@default.Label));
+        EmitStatement(builder, @default.Statement);
+    }
+
+    private static void EmitForInit(ImmutableArray<Instruction>.Builder builder, Ast.ForInit init)
+    {
+        switch (init)
+        {
+            case Ast.ForInits.InitDeclaration { Declaration: Ast.Declaration declaration }:
+                EmitDeclaration(builder, declaration);
+                break;
+            case Ast.ForInits.InitExpression { Expression: Ast.Expression expression }:
+                EmitExpression(builder, expression);
+                break;
+        }
+}
 
     private static Operand EmitExpression(ImmutableArray<Instruction>.Builder builder, Ast.Expression expression) => expression switch
     {
@@ -362,4 +498,8 @@ public class TackyGenerator(Ast.Program ast)
         Ast.PostfixOperators.Decrement => new Subtract(),
         _ => throw new NotImplementedException()
     };
+
+    private static string StartLabel(string label) => $"start.{label}";
+    private static string BreakLabel(string label) => $"break.{label}";
+    private static string ContinueLabel(string label) => $"continue.{label}";
 }

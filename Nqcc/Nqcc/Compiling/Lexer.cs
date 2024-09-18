@@ -218,6 +218,14 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
             "if" => new Keywords.If(CurrentTokenText),
             "else" => new Keywords.Else(CurrentTokenText),
             "goto" => new Keywords.Goto(CurrentTokenText),
+            "do" => new Keywords.Do(CurrentTokenText),
+            "while" => new Keywords.While(CurrentTokenText),
+            "for" => new Keywords.For(CurrentTokenText),
+            "break" => new Keywords.Break(CurrentTokenText),
+            "continue" => new Keywords.Continue(CurrentTokenText),
+            "switch" => new Keywords.Switch(CurrentTokenText),
+            "case" => new Keywords.Case(CurrentTokenText),
+            "default" => new Keywords.Default(CurrentTokenText),
             _ => new Identifier(CurrentTokenText)
         };
 

@@ -1,5 +1,6 @@
 ﻿using Nqcc.Ast;
 using Nqcc.Ast.Expressions;
+using Nqcc.Ast.ForInits;
 using System.Collections.Immutable;
 
 namespace Nqcc.Compiling.SemanticAnalysis;
@@ -50,6 +51,12 @@ public class VariableResolver(Program ast)
         Ast.Statements.Compound compound => ResolveCompound(compound),
         Ast.Statements.If @if => new Ast.Statements.If(ResolveExpression(@if.Condition), ResolveStatement(@if.Then), @if.Else is null ? null : ResolveStatement(@if.Else)),
         Ast.Statements.Label label => new Ast.Statements.Label(label.Name, ResolveStatement(label.Statement)),
+        Ast.Statements.While @while => new Ast.Statements.While(ResolveExpression(@while.Condition), ResolveStatement(@while.Body)),
+        Ast.Statements.DoWhile doWhile => new Ast.Statements.DoWhile(ResolveStatement(doWhile.Body), ResolveExpression(doWhile.Condition)),
+        Ast.Statements.For @for => ResolveFor(@for),
+        Ast.Statements.Switch @switch => ResolveSwitch(@switch),
+        Ast.Statements.Case @case => ResolveCase(@case),
+        Ast.Statements.Default @default => ResolveDefault(@default),
         _ => statement
     };
 
@@ -61,6 +68,54 @@ public class VariableResolver(Program ast)
 
         return new Ast.Statements.Compound(block);
     }
+
+    private Ast.Statements.For ResolveFor(Ast.Statements.For @for)
+    {
+        variableMap.Push();
+        var init = ResolveForInit(@for.Init);
+        var condition = ResolveOptionalExpression(@for.Condition);
+        var post = ResolveOptionalExpression(@for.Post);
+        var body = ResolveStatement(@for.Body);
+        variableMap.Pop();
+
+        return new Ast.Statements.For(init, condition, post, body);
+    }
+
+    private Ast.Statements.Switch ResolveSwitch(Ast.Statements.Switch @switch)
+    {
+        var condition = ResolveExpression(@switch.Condition);
+        var body = ResolveStatement(@switch.Body);
+
+        return new Ast.Statements.Switch(condition, body);
+    }
+
+    private Ast.Statements.Case ResolveCase(Ast.Statements.Case @case)
+    {
+        var condition = ResolveExpression(@case.Condition);
+        var statement = ResolveStatement(@case.Statement);
+
+        return new Ast.Statements.Case(condition, statement);
+    }
+
+    private Ast.Statements.Default ResolveDefault(Ast.Statements.Default @default)
+    {
+        var statement = ResolveStatement(@default.Statement);
+
+        return new Ast.Statements.Default(statement);
+    }
+
+    private ForInit ResolveForInit(ForInit init) => init switch
+    {
+        InitExpression initExpression => new InitExpression(ResolveOptionalExpression(initExpression.Expression)),
+        InitDeclaration initDeclaration => new InitDeclaration(ResolveDeclaration(initDeclaration.Declaration)),
+        _ => throw new NotImplementedException()
+    };
+
+    private Expression? ResolveOptionalExpression(Expression? expression) => expression switch
+    {
+        Expression => ResolveExpression(expression),
+        _ => null
+    };
 
     private Declaration ResolveDeclaration(Declaration declaration)
     {

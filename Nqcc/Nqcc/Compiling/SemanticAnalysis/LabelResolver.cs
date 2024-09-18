@@ -61,6 +61,24 @@ public class LabelAnalyzer(Program ast)
             case Compound compound:
                 AnalyzeCompound(compound);
                 break;
+            case While @while:
+                AnalyzeWhile(@while);
+                break;
+            case DoWhile doWhile:
+                AnalyzeDoWhile(doWhile);
+                break;
+            case For @for:
+                AnalyzeFor(@for);
+                break;
+            case Switch @switch:
+                AnalyzeSwitch(@switch);
+                break;
+            case Case @case:
+                AnalyzeCase(@case);
+                break;
+            case Default @default:
+                AnalyzeDefault(@default);
+                break;
         }
     }
 
@@ -91,5 +109,35 @@ public class LabelAnalyzer(Program ast)
     private void AnalyzeCompound(Compound compound)
     {
         AnalyzeBlock(compound.Block);
+    }
+
+    private void AnalyzeWhile(While @while)
+    {
+        AnalyzeStatement(@while.Body);
+    }
+
+    private void AnalyzeDoWhile(DoWhile doWhile)
+    {
+        AnalyzeStatement(doWhile.Body);
+    }
+
+    private void AnalyzeFor(For @for)
+    {
+        AnalyzeStatement(@for.Body);
+    }
+
+    private void AnalyzeSwitch(Switch @switch)
+    {
+        AnalyzeStatement(@switch.Body);
+    }
+
+    private void AnalyzeCase(Case @case)
+    {
+        AnalyzeStatement(@case.Statement);
+    }
+
+    private void AnalyzeDefault(Default @default)
+    {
+        AnalyzeStatement(@default.Statement);
     }
 }

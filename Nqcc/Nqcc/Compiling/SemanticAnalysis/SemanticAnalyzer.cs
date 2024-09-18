@@ -7,11 +7,17 @@ public class SemanticAnalyzer(Program ast)
     public Program Analyze()
     {
         var variableResolver = new VariableResolver(ast);
-        var resolvedProgram = variableResolver.Resolve();
+        var resolvedAst = variableResolver.Resolve();
 
-        var labelAnalyzer = new LabelAnalyzer(ast);
+        var loopAndSwitchLabeler = new LoopAndSwitchLabeler(resolvedAst);
+        var labeledAst = loopAndSwitchLabeler.Label();
+
+        var switchResolver = new SwitchResolver(labeledAst);
+        var switchResolved = switchResolver.Resolve();
+
+        var labelAnalyzer = new LabelAnalyzer(switchResolved);
         labelAnalyzer.Analyze();
 
-        return resolvedProgram;
+        return switchResolved;
     }
 }
