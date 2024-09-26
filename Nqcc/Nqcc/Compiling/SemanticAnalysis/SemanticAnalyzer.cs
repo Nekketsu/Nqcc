@@ -1,22 +1,26 @@
 ﻿using Nqcc.Ast;
+using Nqcc.Symbols;
 
 namespace Nqcc.Compiling.SemanticAnalysis;
 
-public class SemanticAnalyzer(Program ast)
+public class SemanticAnalyzer(SymbolTable symbols, Program ast)
 {
     public Program Analyze()
     {
-        var variableResolver = new VariableResolver(ast);
-        var resolvedAst = variableResolver.Resolve();
+        var identifierResolver = new IdentifierResolver(ast);
+        var resolvedAst = identifierResolver.Resolve();
 
-        var loopAndSwitchLabeler = new LoopAndSwitchLabeler(resolvedAst);
+        var typeChecker = new TypeChecker(symbols, resolvedAst);
+        typeChecker.Check();
+
+        var labelResolver = new LabelResolver(resolvedAst);
+        var labeledResolved = labelResolver.Resolve();
+
+        var loopAndSwitchLabeler = new LoopAndSwitchLabeler(labeledResolved);
         var labeledAst = loopAndSwitchLabeler.Label();
 
         var switchResolver = new SwitchResolver(labeledAst);
         var switchResolved = switchResolver.Resolve();
-
-        var labelAnalyzer = new LabelAnalyzer(switchResolved);
-        labelAnalyzer.Analyze();
 
         return switchResolved;
     }

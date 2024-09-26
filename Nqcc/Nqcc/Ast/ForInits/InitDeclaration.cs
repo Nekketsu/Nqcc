@@ -1,6 +1,8 @@
-﻿namespace Nqcc.Ast.ForInits;
+﻿using Nqcc.Ast.Declarations;
 
-public class InitDeclaration(Declaration declaration) : ForInit
+namespace Nqcc.Ast.ForInits;
+
+public class InitDeclaration(VariableDeclaration declaration) : ForInit
 {
-    public Declaration Declaration { get; } = declaration;
+    public VariableDeclaration Declaration { get; } = declaration;
 }

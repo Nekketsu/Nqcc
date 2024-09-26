@@ -1,4 +1,5 @@
 ﻿using Nqcc.Ast;
+using Nqcc.Ast.Declarations;
 using Nqcc.Ast.Statements;
 using System.Collections.Immutable;
 
@@ -13,16 +14,21 @@ public class LoopAndSwitchLabeler(Program ast)
 
     private Program LabelProgram(Program program)
     {
-        var function = LabelFunction(program.FunctionDefinition);
+        var builder = ImmutableArray.CreateBuilder<FunctionDeclaration>();
 
-        return new Program(function);
+        foreach (var functionDeclaration in program.FunctionDeclarations)
+        {
+            builder.Add(LabelFunctionDeclaration(functionDeclaration));
+        }
+
+        return new Program(builder.ToImmutable());
     }
 
-    private Function LabelFunction(Function function)
+    private FunctionDeclaration LabelFunctionDeclaration(FunctionDeclaration functionDeclaration)
     {
-        var body = LabelBlock(function.Body);
+        var body = functionDeclaration.Body is null ? null : LabelBlock(functionDeclaration.Body);
 
-        return new Function(function.Name, body);
+        return new FunctionDeclaration(functionDeclaration.Name, functionDeclaration.Parameters, body);
     }
 
     private Block LabelBlock(Block block)

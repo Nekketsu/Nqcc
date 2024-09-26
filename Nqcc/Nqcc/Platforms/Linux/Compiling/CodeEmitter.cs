@@ -1,13 +1,19 @@
-﻿namespace Nqcc.Platforms.Linux.Compiling;
+﻿using Nqcc.Symbols;
 
-public class CodeEmitter(TextWriter writer) : Nqcc.Compiling.CodeEmitter(writer)
+namespace Nqcc.Platforms.Linux.Compiling;
+
+public class CodeEmitter(SymbolTable symbols, TextWriter writer) : Nqcc.Compiling.CodeEmitter(writer)
 {
-    protected override string GetName(string name)
-    {
-        return name;
-    }
+    protected override string GetLabelName(string name) => name;
 
-    protected override string GetLabelName(string name) => $".L{name}";
+    protected override string GetLocalLabelName(string name) => $".L{name}";
+
+    protected override string GetFunctionName(string name)
+    {
+        var function = (Function)symbols[name];
+
+        return function.IsDefined ? name : $"{name}@PLT";
+    }
 
     protected override void EmitStackNote()
     {

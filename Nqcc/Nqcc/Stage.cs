@@ -8,5 +8,6 @@ public enum Stage
     Tacky,
     Codegen,
     Assembly,
+    Object,
     Executable
 }

@@ -1,28 +1,27 @@
 ﻿using Nqcc.Ast;
+using Nqcc.Ast.Declarations;
 using Nqcc.Ast.Expressions;
 using Nqcc.Ast.ForInits;
 using System.Collections.Immutable;
 
 namespace Nqcc.Compiling.SemanticAnalysis;
 
-public class VariableResolver(Program ast)
+public class IdentifierResolver(Program ast)
 {
-    private readonly VariableMap variableMap = new();
+    private readonly IdentifierMap identifierMap = new();
 
     public Program Resolve() => ResolveProgram(ast);
 
     private Program ResolveProgram(Program program)
     {
-        var functionDefinition = ResolveFunction(program.FunctionDefinition);
+        var builder = ImmutableArray.CreateBuilder<FunctionDeclaration>();
 
-        return new Program(functionDefinition);
-    }
+        foreach (var functionDeclaration in program.FunctionDeclarations)
+        {
+            builder.Add(ResolveFunctionDeclaration(functionDeclaration));
+        }
 
-    private Function ResolveFunction(Function function)
-    {
-        var body = ResolveBlock(function.Body);
-
-        return new Function(function.Name, body);
+        return new Program(builder.ToImmutable());
     }
 
     private Block ResolveBlock(Block block)
@@ -40,7 +39,7 @@ public class VariableResolver(Program ast)
     private BlockItem ResolveBlockItem(BlockItem blockItem) => blockItem switch
     {
         Ast.BlockItems.Statement statement => new Ast.BlockItems.Statement(ResolveStatement(statement.InnerStatement)),
-        Ast.BlockItems.Declaration declaration => new Ast.BlockItems.Declaration(ResolveDeclaration(declaration.InnerDeclaration)),
+        Ast.BlockItems.Declaration declaration => new Ast.BlockItems.Declaration(ResolveLocalDeclaration(declaration.InnerDeclaration)),
         _ => blockItem
     };
 
@@ -62,21 +61,21 @@ public class VariableResolver(Program ast)
 
     private Ast.Statements.Compound ResolveCompound(Ast.Statements.Compound compound)
     {
-        variableMap.Push();
+        identifierMap.Push();
         var block = ResolveBlock(compound.Block);
-        variableMap.Pop();
+        identifierMap.Pop();
 
         return new Ast.Statements.Compound(block);
     }
 
     private Ast.Statements.For ResolveFor(Ast.Statements.For @for)
     {
-        variableMap.Push();
+        identifierMap.Push();
         var init = ResolveForInit(@for.Init);
         var condition = ResolveOptionalExpression(@for.Condition);
         var post = ResolveOptionalExpression(@for.Post);
         var body = ResolveStatement(@for.Body);
-        variableMap.Pop();
+        identifierMap.Pop();
 
         return new Ast.Statements.For(init, condition, post, body);
     }
@@ -107,7 +106,7 @@ public class VariableResolver(Program ast)
     private ForInit ResolveForInit(ForInit init) => init switch
     {
         InitExpression initExpression => new InitExpression(ResolveOptionalExpression(initExpression.Expression)),
-        InitDeclaration initDeclaration => new InitDeclaration(ResolveDeclaration(initDeclaration.Declaration)),
+        InitDeclaration initDeclaration => new InitDeclaration(ResolveVariableDeclaration(initDeclaration.Declaration)),
         _ => throw new NotImplementedException()
     };
 
@@ -117,20 +116,65 @@ public class VariableResolver(Program ast)
         _ => null
     };
 
-    private Declaration ResolveDeclaration(Declaration declaration)
+    private Declaration ResolveLocalDeclaration(Declaration declaration) => declaration switch
     {
-        if (variableMap.Contains(declaration.Name))
+        VariableDeclaration variableDeclaration => ResolveVariableDeclaration(variableDeclaration),
+        FunctionDeclaration { Body: not null } => throw new Exception("Nested function definitions are not allowed"),
+        FunctionDeclaration functionDeclaration => ResolveFunctionDeclaration(functionDeclaration),
+        _ => throw new NotImplementedException()
+
+    };
+
+    private VariableDeclaration ResolveVariableDeclaration(VariableDeclaration variableDeclaration)
+    {
+        if (identifierMap.ContainsInCurrentScope(variableDeclaration.Name))
         {
             throw new Exception("Duplicate variable declaration!");
         }
 
         var uniqueName = UniqueId.MakeTemporary();
-        variableMap[declaration.Name] = uniqueName;
-        var initializer = declaration.Initializer is null
+        identifierMap[variableDeclaration.Name] = new Identifier(uniqueName);
+        var initializer = variableDeclaration.Initializer is null
             ? null
-            : ResolveExpression(declaration.Initializer);
+            : ResolveExpression(variableDeclaration.Initializer);
 
-        return new Declaration(uniqueName, initializer);
+        return new VariableDeclaration(uniqueName, initializer);
+    }
+
+    private FunctionDeclaration ResolveFunctionDeclaration(FunctionDeclaration functionDeclaration)
+    {
+        if (identifierMap.TryGetValue(functionDeclaration.Name, out var identifier))
+        {
+            if (identifier.FromCurrentScope && !identifier.HasLinkage)
+            {
+                throw new Exception("Duplicate declaration");
+            }
+        }
+        identifierMap[functionDeclaration.Name] = new Identifier(functionDeclaration.Name, true);
+
+        identifierMap.Push();
+        var builder = ImmutableArray.CreateBuilder<string>();
+        foreach (var parameter in functionDeclaration.Parameters)
+        {
+            builder.Add(ResolveParameter(parameter));
+        }
+        var body = functionDeclaration.Body is null ? null : ResolveBlock(functionDeclaration.Body);
+        identifierMap.Pop();
+
+        return new FunctionDeclaration(functionDeclaration.Name, builder.ToImmutable(), body);
+    }
+
+    private string ResolveParameter(string parameter)
+    {
+        if (identifierMap.ContainsInCurrentScope(parameter))
+        {
+            throw new Exception("Duplicate variable declaration!");
+        }
+
+        var uniqueName = UniqueId.MakeTemporary();
+        identifierMap[parameter] = new Identifier(uniqueName);
+
+        return uniqueName;
     }
 
     private Expression ResolveExpression(Expression expression) => expression switch
@@ -138,16 +182,16 @@ public class VariableResolver(Program ast)
         Assignment { Left: Variable } assignment => new Assignment(ResolveExpression(assignment.Left), ResolveExpression(assignment.Right)),
         Assignment => throw new Exception("Invalid lvalue!"),
 
-        Variable variable when variableMap.TryGetValue(variable.Name, out var resolvedVariableName) => new Variable(resolvedVariableName),
+        Variable variable when identifierMap.TryGetValue(variable.Name, out var identifier) => new Variable(identifier.Name),
         Variable => throw new Exception("Undeclared variable!"),
 
         Unary unary => new Unary(unary.Operator, ResolveExpression(unary.Expression)),
         Binary binary => new Binary(ResolveExpression(binary.Left), binary.Operator, ResolveExpression(binary.Right)),
-        
+
         Compound { Left: Variable } compound => new Compound(ResolveExpression(compound.Left), compound.Operator, ResolveExpression(compound.Right)),
         Compound => throw new Exception("Invalid lvalue!"),
 
-        Prefix { Expression: Variable} prefix => new Prefix(prefix.Operator, ResolveExpression(prefix.Expression)),
+        Prefix { Expression: Variable } prefix => new Prefix(prefix.Operator, ResolveExpression(prefix.Expression)),
         Prefix => throw new Exception("Invalid lvalue!"),
 
         Postfix { Expression: Variable } postfix => new Postfix(ResolveExpression(postfix.Expression), postfix.Operator),
@@ -155,6 +199,24 @@ public class VariableResolver(Program ast)
 
         Conditional conditional => new Conditional(ResolveExpression(conditional.Condition), ResolveExpression(conditional.Then), ResolveExpression(conditional.Else)),
 
+        FunctionCall functionCall => ResolveFunctionCall(functionCall),
+
         _ => expression
     };
+
+    private FunctionCall ResolveFunctionCall(FunctionCall functionCall)
+    {
+        if (!identifierMap.TryGetValue(functionCall.Name, out var identifier))
+        {
+            throw new Exception("Undeclared function!");
+        }
+
+        var builder = ImmutableArray.CreateBuilder<Expression>();
+        foreach (var argument in functionCall.Arguments)
+        {
+            builder.Add(ResolveExpression(argument));
+        }
+
+        return new FunctionCall(identifier.Name, builder.ToImmutable());
+    }
 }

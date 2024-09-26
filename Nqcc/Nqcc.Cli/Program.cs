@@ -18,6 +18,7 @@ var validateOption = new Option<bool>("--validate", "Run the lexer, parser, and 
 var tackyOption = new Option<bool>("--tacky", "Run the lexer, parser, and tacky generator");
 var codegenOption = new Option<bool>("--codegen", "Run through code generation but stop befor emitting assembly");
 var assemblyOption = new Option<bool>(["-s", "-S"], "Stop before assembling (keep assembly file)");
+var objectOption = new Option<bool>("-c", "Stop before invoking linker (keep .o file)");
 
 var debugOption = new Option<bool>("-d", "Write out pre- and post-register-allocation assembly and DOT files of interference graphs.");
 
@@ -32,6 +33,7 @@ var rootCommand = new RootCommand("A not-quite-C compiler")
     tackyOption,
     codegenOption,
     assemblyOption,
+    objectOption,
     targetOption,
     debugOption
 };
@@ -43,9 +45,10 @@ rootCommand.AddValidator(result =>
                                    c.Symbol == validateOption ||
                                    c.Symbol == tackyOption ||
                                    c.Symbol == codegenOption ||
-                                   c.Symbol == assemblyOption) > 1)
+                                   c.Symbol == assemblyOption ||
+                                   c.Symbol == objectOption) > 1)
     {
-        result.ErrorMessage = "You must use either --lex or --parse or --tacky or --codegen";
+        result.ErrorMessage = "You must use either --lex or --parse or --validate or --tacky or --codegen or --assembly or --object";
     }
 });
 
@@ -58,6 +61,7 @@ rootCommand.SetHandler(async context =>
     var tacky = context.ParseResult.GetValueForOption(tackyOption);
     var codegen = context.ParseResult.GetValueForOption(codegenOption);
     var assembly = context.ParseResult.GetValueForOption(assemblyOption);
+    var @object = context.ParseResult.GetValueForOption(objectOption);
     var target = context.ParseResult.GetValueForOption(targetOption);
     var debug = context.ParseResult.GetValueForOption(debugOption);
 
@@ -73,7 +77,9 @@ rootCommand.SetHandler(async context =>
                         ? Stage.Codegen
                         : assembly
                             ? Stage.Assembly
-                            : Stage.Executable;
+                            : @object
+                                ? Stage.Object
+                                : Stage.Executable;
 
     var settings = new Settings
     {

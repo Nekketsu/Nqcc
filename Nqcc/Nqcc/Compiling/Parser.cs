@@ -1,6 +1,7 @@
 ﻿using Nqcc.Ast;
 using Nqcc.Ast.BinaryOperators;
 using Nqcc.Ast.CompoundOperators;
+using Nqcc.Ast.Declarations;
 using Nqcc.Ast.Expressions;
 using Nqcc.Ast.UnaryOperators;
 using Nqcc.Lex;
@@ -22,6 +23,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
 
     private SyntaxToken Current => Peek(0);
     private SyntaxToken LookAhead => Peek(1);
+    private bool IsEof => position >= tokens.Length;
 
     private SyntaxToken TakeToken()
     {
@@ -46,7 +48,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
     {
         var program = ParseProgram();
 
-        if (position < tokens.Length)
+        if (!IsEof)
         {
             throw new Exception($"Expected end of file but got {Current}");
         }
@@ -56,21 +58,71 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
 
     private Program ParseProgram()
     {
-        var functionSyntax = ParseFunction();
+        var builder = ImmutableArray.CreateBuilder<FunctionDeclaration>();
 
-        return new Program(functionSyntax);
+        while (!IsEof)
+        {
+            builder.Add(ParseFunctionDeclaration());
+        }
+
+        return new Program(builder.ToImmutable());
     }
 
-    private Function ParseFunction()
+    private FunctionDeclaration ParseFunctionDeclaration(Identifier? name = null)
     {
-        Expect<Int>();
-        var name = Expect<Identifier>();
+        if (name is null)
+        {
+            Expect<Int>();
+            name = Expect<Identifier>();
+        }
         Expect<OpenParenthesis>();
-        Expect<Lex.Keywords.Void>();
+        var parameters = ParseParameters();
         Expect<CloseParenthesis>();
-        var body = ParseBlock();
+        Block? body = null;
+        if (Current is OpenBrace)
+        {
+            body = ParseBlock();
+        }
+        else
+        {
+            Expect<Semicolon>();
+        }
 
-        return new Function(name.Text, body);
+        return new FunctionDeclaration(name.Text, parameters, body);
+    }
+
+    private ImmutableArray<string> ParseParameters()
+    {
+        var builder = ImmutableArray.CreateBuilder<string>();
+
+        switch (Current)
+        {
+            case Lex.Keywords.Void:
+                Expect<Lex.Keywords.Void>();
+                break;
+            case not Lex.Keywords.Void:
+                {
+                    bool hasParameters = true;
+                    do
+                    {
+                        Expect<Int>();
+                        var name = Expect<Identifier>();
+                        builder.Add(name.Text);
+
+                        if (Current is Comma)
+                        {
+                            Expect<Comma>();
+                        }
+                        else
+                        {
+                            hasParameters = false;
+                        }
+                    } while (hasParameters);
+                    break;
+                }
+        }
+
+        return builder.ToImmutable();
     }
 
     private Block ParseBlock()
@@ -98,6 +150,25 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
     {
         Expect<Int>();
         var name = Expect<Identifier>();
+
+        if (Current is not OpenParenthesis)
+        {
+            return ParseVariableDeclaration(name);
+        }
+        else
+        {
+            return ParseFunctionDeclaration(name);
+        }
+    }
+
+    private VariableDeclaration ParseVariableDeclaration(Identifier? name = null)
+    {
+        if (name is null)
+        {
+            Expect<Int>();
+            name = Expect<Identifier>();
+        }
+
         var token = TakeToken();
         var initializer = token switch
         {
@@ -106,12 +177,12 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
             _ => throw new Exception($"Expected an initializer or semicolon but found \"{Current}\"")
         };
 
-        return new Declaration(name.Text, initializer);
+        return new VariableDeclaration(name.Text, initializer);
     }
 
     private ForInit ParseForInit() => Current switch
     {
-        Int => new Ast.ForInits.InitDeclaration(ParseDeclaration()),
+        Int => new Ast.ForInits.InitDeclaration(ParseVariableDeclaration()),
         _ => new Ast.ForInits.InitExpression(ParseOptionalExpression<Semicolon>())
     };
 
@@ -174,7 +245,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
 
         return new Ast.Statements.Null();
     }
-    
+
     private Ast.Statements.Label ParseLabelStatement()
     {
         var identifier = Expect<Identifier>();
@@ -348,10 +419,11 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         var expression = Current switch
         {
             Lex.Constant => ParseConstantExpression(),
-            Identifier => ParseVariableExpression(),
+            Identifier when LookAhead is not OpenParenthesis => ParseVariableExpression(),
             Tilde or Minus or Bang => ParseUnaryExpression(),
             PlusPlus or MinusMinus => ParsePrefixExpression(),
             OpenParenthesis => ParseParenthesizedExpression(),
+            Identifier when LookAhead is OpenParenthesis => ParseFunctionCall(),
             _ => throw new Exception($"Expected an expression but found \"{Current}\""),
         };
 
@@ -401,6 +473,30 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         Expect<CloseParenthesis>();
 
         return expression;
+    }
+
+    private FunctionCall ParseFunctionCall()
+    {
+        var name = Expect<Identifier>();
+        Expect<OpenParenthesis>();
+        var arguments = (Current is CloseParenthesis) ? [] : ParseArguments();
+        Expect<CloseParenthesis>();
+
+        return new FunctionCall(name.Text, arguments);
+    }
+
+    private ImmutableArray<Expression> ParseArguments()
+    {
+        var builder = ImmutableArray.CreateBuilder<Expression>();
+
+        builder.Add(ParseExpression());
+        while (Current is Comma)
+        {
+            Expect<Comma>();
+            builder.Add(ParseExpression());
+        }
+
+        return builder.ToImmutable();
     }
 
     private BinaryOperator ParseBinaryOperator()

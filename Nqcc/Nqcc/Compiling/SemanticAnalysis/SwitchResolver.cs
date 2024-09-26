@@ -1,4 +1,5 @@
 ﻿using Nqcc.Ast;
+using Nqcc.Ast.Declarations;
 using Nqcc.Ast.Statements;
 using System.Collections.Immutable;
 
@@ -26,16 +27,21 @@ public class SwitchResolver(Program ast)
 
     private Program ResolveProgram(Program program)
     {
-        var function = ResolveFunction(program.FunctionDefinition);
+        var builder = ImmutableArray.CreateBuilder<FunctionDeclaration>();
 
-        return new Program(function);
+        foreach (var functionDeclaration in program.FunctionDeclarations)
+        {
+            builder.Add(ResolveFunctionDeclaration(functionDeclaration));
+        }
+
+        return new Program(builder.ToImmutable());
     }
 
-    private Function ResolveFunction(Function function)
+    private FunctionDeclaration ResolveFunctionDeclaration(FunctionDeclaration functionDeclaration)
     {
-        var block = ResolveBlock(function.Body);
+        var block = functionDeclaration.Body is null ? null : ResolveBlock(functionDeclaration.Body);
 
-        return new Function(function.Name, block);
+        return new FunctionDeclaration(functionDeclaration.Name, functionDeclaration.Parameters, block);
     }
 
     private Block ResolveBlock(Block block)

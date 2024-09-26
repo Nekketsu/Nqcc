@@ -3,39 +3,46 @@ using Nqcc.Assembly.BinaryOperators;
 using Nqcc.Assembly.Instructions;
 using Nqcc.Assembly.Operands;
 using Nqcc.Assembly.Operands.Registers;
+using Nqcc.Symbols;
 using System.Collections.Immutable;
 
 namespace Nqcc.Backend;
 
-public class InstructionFixer(Program tacky, int lastStackSlot)
+public class InstructionFixer(SymbolTable symbols, Program tacky)
 {
-    public Program FixUp() => FixUpProgram(tacky, lastStackSlot);
+    public Program FixUp() => FixUpProgram(tacky);
 
-    private static Program FixUpProgram(Program program, int lastStackSlot)
+    private Program FixUpProgram(Program program)
     {
-        var function = FixUpFunction(program.FunctionDefinition, lastStackSlot);
+        var builder = ImmutableArray.CreateBuilder<FunctionDefinition>();
 
-        return new Program(function);
+        foreach (var functionDefinition in program.FunctionDefinitions)
+        {
+            builder.Add(FixUpFunction(functionDefinition));
+        }
+
+        return new Program(builder.ToImmutable());
     }
 
-    private static Function FixUpFunction(Function function, int lastStackSlot)
-    {
-        var instructions = FixUpInstructions(function.Instructions, lastStackSlot);
-
-        return new Function(function.Name, instructions);
-    }
-
-    private static ImmutableArray<Instruction> FixUpInstructions(ImmutableArray<Instruction> instructions, int lastStackSlot)
+    private FunctionDefinition FixUpFunction(FunctionDefinition functionDefinition)
     {
         var builder = ImmutableArray.CreateBuilder<Instruction>();
 
-        builder.Add(new AllocateStack(-lastStackSlot));
+        var function = (Function)symbols[functionDefinition.Name];
+        var stackSize = (int)(Math.Ceiling(function.StackSize / 16f) * 16);
+
+        builder.Add(new AllocateStack(stackSize));
+        FixUpInstructions(builder, functionDefinition.Instructions);
+
+        return new FunctionDefinition(functionDefinition.Name, builder.ToImmutable());
+    }
+
+    private static void FixUpInstructions(ImmutableArray<Instruction>.Builder builder, ImmutableArray<Instruction> instructions)
+    {
         foreach (var instruction in instructions)
         {
             builder.AddRange(FixUpInstruction(instruction));
         }
-
-        return builder.ToImmutable();
     }
 
     private static Instruction[] FixUpInstruction(Instruction instruction) => instruction switch

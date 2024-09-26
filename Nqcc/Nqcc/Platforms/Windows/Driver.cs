@@ -27,4 +27,14 @@ public class Driver(Settings settings) : Nqcc.Driver(settings)
 
         return outputFile;
     }
+
+    protected override async Task<string> Assemble(string assemblyFile)
+    {
+        var outputFile = Path.ChangeExtension(assemblyFile, ".obj");
+
+        var process = StartProcess(@"ml64", $"/c {assemblyFile}");
+        await process.WaitForExitAsync();
+
+        return outputFile;
+    }
 }

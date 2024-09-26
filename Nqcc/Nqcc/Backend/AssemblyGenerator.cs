@@ -1,20 +1,26 @@
 ﻿using Nqcc.Assembly;
+using Nqcc.Symbols;
 
 namespace Nqcc.Backend;
 
-public class AssemblyGenerator(Tacky.Program tacky)
+public class AssemblyGenerator(SymbolTable symbols, Tacky.Program tacky)
 {
     public Program Generate()
     {
-        var converter = new TackyToAssemblyConverter(tacky);
+        TackyToAssemblyConverter converter = GetTackyToAssemblyConverter(tacky);
         var converted = converter.Convert();
 
-        var replacer = new PseudoRegisterReplacer(converted);
-        var replaced = replacer.Replace(out var lastStackSlot);
+        var replacer = new PseudoRegisterReplacer(symbols, converted);
+        var replaced = replacer.Replace();
 
-        var fixer = new InstructionFixer(replaced, lastStackSlot);
+        var fixer = new InstructionFixer(symbols, replaced);
         var @fixed = fixer.FixUp();
 
         return @fixed;
+    }
+
+    protected virtual TackyToAssemblyConverter GetTackyToAssemblyConverter(Tacky.Program tacky)
+    {
+        return new TackyToAssemblyConverter(tacky);
     }
 }

@@ -14,27 +14,34 @@ public abstract class CodeEmitter(TextWriter writer) : ICodeEmitter
 
     public void Emit(Program assembly) => EmitProgram(assembly);
 
-    protected abstract string GetName(string name);
-
     protected abstract string GetLabelName(string name);
+
+    protected abstract string GetLocalLabelName(string name);
+
+    protected abstract string GetFunctionName(string name);
 
     protected abstract void EmitStackNote();
 
     private void EmitProgram(Program program)
     {
-        EmitFunction(program.FunctionDefinition);
+        foreach (var functionDefinition in program.FunctionDefinitions)
+        {
+            EmitFunction(functionDefinition);
+            writer.WriteLine();
+        }
+
         EmitStackNote();
     }
 
-    private void EmitFunction(Function function)
+    private void EmitFunction(FunctionDefinition functionDefinition)
     {
-        var name = GetName(function.Name);
+        var name = GetLabelName(functionDefinition.Name);
         writer.WriteLine($"\t.globl {name}");
         writer.WriteLine($"{name}:");
         writer.WriteLine("\tpushq\t%rbp");
         writer.WriteLine("\tmovq\t%rsp, %rbp");
 
-        foreach (var instruction in function.Instructions)
+        foreach (var instruction in functionDefinition.Instructions)
         {
             EmitInstruction(instruction);
         }
@@ -79,6 +86,15 @@ public abstract class CodeEmitter(TextWriter writer) : ICodeEmitter
                 break;
             case Label label:
                 EmitLabelInstruction(label);
+                break;
+            case DeallocateStack deallocateStack:
+                EmitDeallocateStack(deallocateStack);
+                break;
+            case Push push:
+                EmitPush(push);
+                break;
+            case Call call:
+                EmitCall(call);
                 break;
         }
     }
@@ -155,12 +171,12 @@ public abstract class CodeEmitter(TextWriter writer) : ICodeEmitter
 
     private void EmitJmpInstruction(Jmp jmp)
     {
-        writer.WriteLine($"\tjmp\t{GetLabelName(jmp.Target)}");
+        writer.WriteLine($"\tjmp\t{GetLocalLabelName(jmp.Target)}");
     }
 
     private void EmitJmpCcInstruction(JmpCc jmp)
     {
-        writer.WriteLine($"\tj{ShowConditionCode(jmp.ConditionCode)}\t{GetLabelName(jmp.Target)}");
+        writer.WriteLine($"\tj{ShowConditionCode(jmp.ConditionCode)}\t{GetLocalLabelName(jmp.Target)}");
     }
 
     private void EmitSetCcInstruction(SetCc set)
@@ -170,7 +186,22 @@ public abstract class CodeEmitter(TextWriter writer) : ICodeEmitter
 
     private void EmitLabelInstruction(Label label)
     {
-        writer.WriteLine($"{GetLabelName(label.Identifier)}:");
+        writer.WriteLine($"{GetLocalLabelName(label.Identifier)}:");
+    }
+
+    private void EmitDeallocateStack(DeallocateStack deallocateStack)
+    {
+        writer.WriteLine($"\taddq\t${deallocateStack.Size}, %rsp");
+    }
+
+    private void EmitPush(Push push)
+    {
+        writer.WriteLine($"\tpushq\t{ShowQuadwordOperand(push.Operand)}");
+    }
+
+    private void EmitCall(Call call)
+    {
+        writer.WriteLine($"\tcall\t{GetFunctionName(call.Name)}");
     }
 
     private static string ShowOperand(Operand operand) => operand switch
@@ -181,13 +212,9 @@ public abstract class CodeEmitter(TextWriter writer) : ICodeEmitter
         _ => throw new NotImplementedException()
     };
 
-    private static string ShowByteOperand(Operand operand) => operand switch
+    private static string ShowQuadwordOperand(Operand operand) => operand switch
     {
-        AX => "%al",
-        CX => "%cl",
-        DX => "%dl",
-        R10 => "%r10b",
-        R11 => "%r11b",
+        Register register => ShowQuadwordRegisterOperand(register),
         _ => ShowOperand(operand)
     };
 
@@ -196,6 +223,10 @@ public abstract class CodeEmitter(TextWriter writer) : ICodeEmitter
         AX => "%eax",
         CX => "%ecx",
         DX => "%edx",
+        DI => "%edi",
+        SI => "%esi",
+        R8 => "%r8d",
+        R9 => "%r9d",
         R10 => "%r10d",
         R11 => "%r11d",
         _ => throw new NotImplementedException()
@@ -204,6 +235,34 @@ public abstract class CodeEmitter(TextWriter writer) : ICodeEmitter
     private static string ShowStackOperand(Stack stack) => $"{stack.Offset}(%rbp)";
 
     private static string ShowImmOperand(Imm imm) => $"${imm.Value}";
+
+    private static string ShowByteOperand(Operand operand) => operand switch
+    {
+        AX => "%al",
+        CX => "%cl",
+        DX => "%dl",
+        DI => "%dil",
+        SI => "%sil",
+        R8 => "%r8b",
+        R9 => "%r9b",
+        R10 => "%r10b",
+        R11 => "%r11b",
+        _ => ShowOperand(operand)
+    };
+
+    private static string ShowQuadwordRegisterOperand(Register register) => register switch
+    {
+        AX => "%rax",
+        CX => "%rcx",
+        DX => "%rdx",
+        DI => "%rdi",
+        SI => "%rsi",
+        R8 => "%r8",
+        R9 => "%r9",
+        R10 => "%r10",
+        R11 => "%r11",
+        _ => throw new NotImplementedException()
+    };
 
     private static string ShowConditionCode(ConditionCode conditionCode) => conditionCode switch
     {

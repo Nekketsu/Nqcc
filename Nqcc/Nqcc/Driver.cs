@@ -16,8 +16,14 @@ public abstract class Driver(Settings settings) : IDriver
 
         File.Delete(preprocessedFile);
 
-        if (settings.Stage < Stage.Executable) { return; }
-        await AssembleAndLinkAsync(assemblyFile);
+        if (settings.Stage == Stage.Object)
+        {
+            await Assemble(assemblyFile);
+        }
+        else if (settings.Stage == Stage.Executable)
+        {
+            await AssembleAndLinkAsync(assemblyFile);
+        }
 
         if (!settings.Debug)
         {
@@ -63,6 +69,20 @@ public abstract class Driver(Settings settings) : IDriver
             : Path.Combine(path, file);
 
         var process = StartProcess("gcc", $"{assemblyFile} -o {outputFile}");
+        await process.WaitForExitAsync();
+
+        return outputFile;
+    }
+
+    protected virtual async Task<string> Assemble(string assemblyFile)
+    {
+        var path = Path.GetDirectoryName(assemblyFile);
+        var file = Path.ChangeExtension(assemblyFile, ".o");
+        string outputFile = path is null
+            ? file
+            : Path.Combine(path, file);
+
+        var process = StartProcess("gcc", $"-c {assemblyFile} -o {outputFile}");
         await process.WaitForExitAsync();
 
         return outputFile;

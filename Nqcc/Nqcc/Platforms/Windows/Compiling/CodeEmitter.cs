@@ -22,24 +22,28 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
     {
         writer.WriteLine(".code");
         writer.WriteLine();
-        EmitFunction(program.FunctionDefinition);
+        foreach (var functionDefinition in program.FunctionDefinitions)
+        {
+            EmitFunction(functionDefinition);
+            writer.WriteLine();
+        }
         writer.WriteLine();
         writer.WriteLine("END");
     }
 
-    private void EmitFunction(Function function)
+    private void EmitFunction(FunctionDefinition functionDefinition)
     {
-        writer.WriteLine($"PUBLIC\t{function.Name}");
-        writer.WriteLine($"{function.Name}\tPROC");
+        writer.WriteLine($"PUBLIC\t{functionDefinition.Name}");
+        writer.WriteLine($"{functionDefinition.Name}\tPROC");
         writer.WriteLine("\tpush\trbp");
         writer.WriteLine("\tmov\trbp, rsp");
 
-        foreach (var instruction in function.Instructions)
+        foreach (var instruction in functionDefinition.Instructions)
         {
             EmitInstruction(instruction);
         }
 
-        writer.WriteLine($"{function.Name}\tENDP");
+        writer.WriteLine($"{functionDefinition.Name}\tENDP");
     }
 
     private void EmitInstruction(Instruction instruction)
@@ -81,6 +85,15 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
                 break;
             case Label label:
                 EmitLabelInstruction(label);
+                break;
+            case DeallocateStack deallocateStack:
+                EmitDeallocateStack(deallocateStack);
+                break;
+            case Push push:
+                EmitPush(push);
+                break;
+            case Call call:
+                EmitCall(call);
                 break;
         }
     }
@@ -175,6 +188,21 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         writer.WriteLine($"{GetLabelName(label.Identifier)}:");
     }
 
+    private void EmitDeallocateStack(DeallocateStack deallocateStack)
+    {
+        writer.WriteLine($"\tadd\trsp, {deallocateStack.Size}");
+    }
+
+    private void EmitPush(Push push)
+    {
+        writer.WriteLine($"\tpush\t{ShowQuadwordOperand(push.Operand)}");
+    }
+
+    private void EmitCall(Call call)
+    {
+        writer.WriteLine($"\tcall\t{call.Name}");
+    }
+
     private static string ShowOperand(Operand operand) => operand switch
     {
         Register register => ShowRegisterOperand(register),
@@ -182,7 +210,7 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         Imm imm => ShowImmOperand(imm),
         _ => throw new NotImplementedException()
     };
-    
+
     private static string ShowByteOperand(Operand operand) => operand switch
     {
         Register register => ShowByteRegisterOperand(register),
@@ -191,11 +219,21 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         _ => throw new NotImplementedException()
     };
 
+    private static string ShowQuadwordOperand(Operand operand) => operand switch
+    {
+        Register register => ShowQuadwordRegisterOperand(register),
+        _ => ShowOperand(operand)
+    };
+
     private static string ShowRegisterOperand(Register register) => register switch
     {
         AX => "eax",
         CX => "ecx",
         DX => "edx",
+        DI => "edi",
+        SI => "esi",
+        R8 => "r8d",
+        R9 => "r9d",
         R10 => "r10d",
         R11 => "r11d",
         _ => throw new NotImplementedException()
@@ -215,6 +253,10 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         AX => "al",
         CX => "cl",
         DX => "dl",
+        DI => "dil",
+        SI => "sil",
+        R8 => "r8b",
+        R9 => "r9b",
         R10 => "r10b",
         R11 => "r11b",
         _ => throw new NotImplementedException()
@@ -225,6 +267,20 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         < 0 => $"BYTE PTR [rbp - {-stack.Offset}]",
         0 => "BYTE PTR [rbp]",
         > 0 => $"BYTE PTR [rbp + {stack.Offset}]"
+    };
+
+    private static string ShowQuadwordRegisterOperand(Register register) => register switch
+    {
+        AX => "rax",
+        CX => "rcx",
+        DX => "rdx",
+        DI => "rdi",
+        SI => "rsi",
+        R8 => "r8",
+        R9 => "r9",
+        R10 => "r10",
+        R11 => "r11",
+        _ => throw new NotImplementedException()
     };
 
     private static string ShowConditionCode(ConditionCode conditionCode) => conditionCode switch

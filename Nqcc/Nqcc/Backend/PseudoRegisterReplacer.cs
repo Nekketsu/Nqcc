@@ -1,38 +1,46 @@
 ﻿using Nqcc.Assembly;
 using Nqcc.Assembly.Instructions;
 using Nqcc.Assembly.Operands;
+using Nqcc.Symbols;
 using System.Collections.Immutable;
 
 namespace Nqcc.Backend;
 
-public class PseudoRegisterReplacer(Program tacky)
+public class PseudoRegisterReplacer(SymbolTable symbols, Program tacky)
 {
     private int currentOffset = 0;
     private readonly Dictionary<string, int> offsetMap = [];
 
-    public Program Replace(out int lastStackSlot)
+    public Program Replace()
     {
-        currentOffset = 0;
-        offsetMap.Clear();
-
         var replacedProgram = ReplaceProgram(tacky);
 
-        lastStackSlot = currentOffset;
         return replacedProgram;
     }
 
     private Program ReplaceProgram(Program program)
     {
-        var function = ReplaceFunction(program.FunctionDefinition);
+        var builder = ImmutableArray.CreateBuilder<FunctionDefinition>();
 
-        return new Program(function);
+        foreach (var functionDefinition in program.FunctionDefinitions)
+        {
+            builder.Add(ReplaceFunction(functionDefinition));
+        }
+
+        return new Program(builder.ToImmutable());
     }
 
-    private Function ReplaceFunction(Function function)
+    private FunctionDefinition ReplaceFunction(FunctionDefinition functionDefinition)
     {
-        var instructions = ReplaceInstructions(function.Instructions);
+        currentOffset = 0;
+        offsetMap.Clear();
 
-        return new Function(function.Name, instructions);
+        var instructions = ReplaceInstructions(functionDefinition.Instructions);
+
+        var function = (Function)symbols[functionDefinition.Name];
+        symbols.AddOrReplace(new Function(function.Name, function.ParameterCount, function.IsDefined, -currentOffset));
+
+        return new FunctionDefinition(functionDefinition.Name, instructions);
     }
 
     private ImmutableArray<Instruction> ReplaceInstructions(ImmutableArray<Instruction> instructions)
@@ -55,7 +63,7 @@ public class PseudoRegisterReplacer(Program tacky)
         Idiv idiv => ReplaceIdivInstruction(idiv),
         Cmp cmp => ReplaceCmpInstruction(cmp),
         SetCc set => ReplaceSetCcInstruction(set),
-        AllocateStack => throw new Exception("Internal error: AllocateStack shouldn't be present at this point"),
+        Push push => ReplacePushInstruction(push),
         _ => instruction
     };
 
@@ -101,6 +109,13 @@ public class PseudoRegisterReplacer(Program tacky)
         var operand = ReplaceOperand(set.Operand);
 
         return new SetCc(set.ConditionCode, operand);
+    }
+
+    private Push ReplacePushInstruction(Push push)
+    {
+        var operand = ReplaceOperand(push.Operand);
+
+        return new Push(operand);
     }
 
     private Operand ReplaceOperand(Operand operand) => operand switch

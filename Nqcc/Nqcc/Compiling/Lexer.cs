@@ -198,6 +198,9 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
             case ':':
                 position++;
                 return new Colon(CurrentTokenText);
+            case ',':
+                position++;
+                return new Comma(CurrentTokenText);
         }
 
         throw new Exception($"Lexer failure: bad character {Current}");

@@ -1,18 +1,30 @@
 ﻿using Nqcc.Ast;
+using Nqcc.Ast.Declarations;
 using Nqcc.Ast.Statements;
+using System.Collections.Immutable;
 
 namespace Nqcc.Compiling.SemanticAnalysis;
 
-public class LabelAnalyzer(Program ast)
+public class LabelResolver(Program ast)
 {
     private readonly HashSet<string> labels = [];
     private readonly HashSet<string> gotos = [];
 
-    public void Analyze() => AnalyzeProgram(ast);
+    private readonly Stack<string> functions = new();
+    private string CurrentFunction => functions.Peek();
 
-    private void AnalyzeProgram(Program program)
+    public Program Resolve() => ResolveProgram(ast);
+
+    private Program ResolveProgram(Program program)
     {
-        AnalyzeFunction(program.FunctionDefinition);
+        var builder = ImmutableArray.CreateBuilder<FunctionDeclaration>();
+
+        foreach (var functionDeclaration in program.FunctionDeclarations)
+        {
+            functions.Push(functionDeclaration.Name);
+            builder.Add(ResolveFunctionDeclaration(functionDeclaration));
+            functions.Pop();
+        }
 
         foreach (var @goto in gotos)
         {
@@ -21,123 +33,129 @@ public class LabelAnalyzer(Program ast)
                 throw new Exception($"Undeclared label {@goto}!");
             }
         }
+
+        return new Program(builder.ToImmutable());
     }
 
-    private void AnalyzeFunction(Function function)
+    private FunctionDeclaration ResolveFunctionDeclaration(FunctionDeclaration functionDeclaration)
     {
-        AnalyzeBlock(function.Body);
-        
+        var body = functionDeclaration.Body is null ? null : ResolveBlock(functionDeclaration.Body);
+
+        return new FunctionDeclaration(functionDeclaration.Name, functionDeclaration.Parameters, body);
     }
 
-    private void AnalyzeBlock(Block block)
+    private Block ResolveBlock(Block block)
     {
+        var builder = ImmutableArray.CreateBuilder<BlockItem>();
+
         foreach (var blockItem in block.BlockItems)
         {
-            AnalyzeBlockItem(blockItem);
+            builder.Add(ResolveBlockItem(blockItem));
         }
+
+        return new Block(builder.ToImmutable());
     }
 
-    private void AnalyzeBlockItem(BlockItem blockItem)
+    private BlockItem ResolveBlockItem(BlockItem blockItem) => blockItem switch
     {
-        if (blockItem is Ast.BlockItems.Statement statement)
+        Ast.BlockItems.Statement statement => new Ast.BlockItems.Statement(ResolveStatement(statement.InnerStatement)),
+        _ => blockItem
+    };
+
+    private Statement ResolveStatement(Statement statement) => statement switch
+    {
+        Label label => ResolveLabel(label),
+        Goto @goto => ResolveGoto(@goto),
+        If @if => ResolveIf(@if),
+        Compound compound => ResolveCompound(compound),
+        While @while => ResolveWhile(@while),
+        DoWhile doWhile => ResolveDoWhile(doWhile),
+        For @for => ResolveFor(@for),
+        Switch @switch => ResolveSwitch(@switch),
+        Case @case => ResolveCase(@case),
+        Default @default => ResolveDefault(@default),
+        _ => statement
+    };
+
+    private Label ResolveLabel(Label label)
+    {
+        var name = ResolveLabelName(label.Name);
+
+        if (!labels.Add(name))
         {
-            AnalyzeStatement(statement.InnerStatement);
-        }
-    }
-
-    private void AnalyzeStatement(Statement statement)
-    {
-        switch (statement)
-        {
-            case Label label:
-                AnalyzeLabel(label);
-                break;
-            case Goto @goto:
-                AnalyzeGoto(@goto);
-                break;
-            case If @if:
-                AnalyzeIf(@if);
-                break;
-            case Compound compound:
-                AnalyzeCompound(compound);
-                break;
-            case While @while:
-                AnalyzeWhile(@while);
-                break;
-            case DoWhile doWhile:
-                AnalyzeDoWhile(doWhile);
-                break;
-            case For @for:
-                AnalyzeFor(@for);
-                break;
-            case Switch @switch:
-                AnalyzeSwitch(@switch);
-                break;
-            case Case @case:
-                AnalyzeCase(@case);
-                break;
-            case Default @default:
-                AnalyzeDefault(@default);
-                break;
-        }
-    }
-
-    private void AnalyzeLabel(Label label)
-    {
-        if (!labels.Add(label.Name))
-        {
-            throw new Exception($"Duplicate label {label.Name} declaration!");
+            throw new Exception($"Duplicate label {name} declaration!");
         }
 
-        AnalyzeStatement(label.Statement);
+        var statement = ResolveStatement(label.Statement);
+
+        return new Label(name, statement);
     }
 
-    private void AnalyzeGoto(Goto @goto)
+    private Goto ResolveGoto(Goto @goto)
     {
-        gotos.Add(@goto.Target);
+        var target = ResolveLabelName(@goto.Target);
+
+        gotos.Add(target);
+
+        return new Goto(target);
     }
 
-    private void AnalyzeIf(If @if)
+    private If ResolveIf(If @if)
     {
-        AnalyzeStatement(@if.Then);
-        if (@if.Else is not null)
-        {
-            AnalyzeStatement(@if.Else);
-        }
+        var then = ResolveStatement(@if.Then);
+        var @else = @if.Else is null ? null : ResolveStatement(@if.Else);
+
+        return new If(@if.Condition, then, @else);
     }
 
-    private void AnalyzeCompound(Compound compound)
+    private Compound ResolveCompound(Compound compound)
     {
-        AnalyzeBlock(compound.Block);
+        var block = ResolveBlock(compound.Block);
+
+        return new Compound(block);
     }
 
-    private void AnalyzeWhile(While @while)
+    private While ResolveWhile(While @while)
     {
-        AnalyzeStatement(@while.Body);
+        var body = ResolveStatement(@while.Body);
+
+        return new While(@while.Condition, body);
     }
 
-    private void AnalyzeDoWhile(DoWhile doWhile)
+    private DoWhile ResolveDoWhile(DoWhile doWhile)
     {
-        AnalyzeStatement(doWhile.Body);
+        var body = ResolveStatement(doWhile.Body);
+
+        return new DoWhile(body, doWhile.Condition);
     }
 
-    private void AnalyzeFor(For @for)
+    private For ResolveFor(For @for)
     {
-        AnalyzeStatement(@for.Body);
+        var body = ResolveStatement(@for.Body);
+
+        return new For(@for.Init, @for.Condition, @for.Post, body);
     }
 
-    private void AnalyzeSwitch(Switch @switch)
+    private Switch ResolveSwitch(Switch @switch)
     {
-        AnalyzeStatement(@switch.Body);
+        var body = ResolveStatement(@switch.Body);
+
+        return new Switch(@switch.Condition, body);
     }
 
-    private void AnalyzeCase(Case @case)
+    private Case ResolveCase(Case @case)
     {
-        AnalyzeStatement(@case.Statement);
+        var statement = ResolveStatement(@case.Statement);
+
+        return new Case(@case.Condition, statement);
     }
 
-    private void AnalyzeDefault(Default @default)
+    private Default ResolveDefault(Default @default)
     {
-        AnalyzeStatement(@default.Statement);
+        var statement = ResolveStatement(@default.Statement);
+
+        return new Default(statement);
     }
+
+    private string ResolveLabelName(string name) => $"{CurrentFunction}.{name}";
 }

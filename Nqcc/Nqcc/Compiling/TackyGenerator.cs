@@ -14,20 +14,33 @@ public class TackyGenerator(Ast.Program ast)
 
     private static Program EmitProgram(Ast.Program program)
     {
-        var functionDefinition = EmitFunction(program.FunctionDefinition);
+        var builder = ImmutableArray.CreateBuilder<FunctionDefinition>();
 
-        return new Program(functionDefinition);
+        foreach (var functionDeclaration in program.FunctionDeclarations)
+        {
+            var functionDefinition = EmitFunctionDeclaration(functionDeclaration);
+            if (functionDefinition is not null)
+            {
+                builder.Add(functionDefinition);
+            }
+        }
+
+        return new Program(builder.ToImmutable());
     }
 
-    private static Function EmitFunction(Ast.Function function)
+    private static FunctionDefinition? EmitFunctionDeclaration(Ast.Declarations.FunctionDeclaration functionDeclaration)
     {
         var builder = ImmutableArray.CreateBuilder<Instruction>();
 
-        EmitBlock(builder, function.Body);
+        if (functionDeclaration.Body is not null)
+        {
+            EmitBlock(builder, functionDeclaration.Body);
+            builder.Add(new Return(new Constant(0)));
 
-        builder.Add(new Return(new Constant(0)));
+            return new FunctionDefinition(functionDeclaration.Name, functionDeclaration.Parameters, builder.ToImmutable());
+        }
 
-        return new Function(function.Name, builder.ToImmutable());
+        return null;
     }
 
     private static void EmitBlock(ImmutableArray<Instruction>.Builder builder, Ast.Block block)
@@ -97,14 +110,14 @@ public class TackyGenerator(Ast.Program ast)
             case Ast.Statements.Default @default:
                 EmitDefault(builder, @default);
                 break;
-            }
+        }
     }
 
     private static void EmitDeclaration(ImmutableArray<Instruction>.Builder builder, Ast.Declaration declaration)
     {
-        if (declaration.Initializer is not null)
+        if (declaration is Ast.Declarations.VariableDeclaration variableDeclaration && variableDeclaration.Initializer is not null)
         {
-            EmitExpression(builder, new Ast.Expressions.Assignment(new Ast.Expressions.Variable(declaration.Name), declaration.Initializer));
+            EmitExpression(builder, new Ast.Expressions.Assignment(new Ast.Expressions.Variable(variableDeclaration.Name), variableDeclaration.Initializer));
         }
     }
 
@@ -266,7 +279,7 @@ public class TackyGenerator(Ast.Program ast)
                 EmitExpression(builder, expression);
                 break;
         }
-}
+    }
 
     private static Operand EmitExpression(ImmutableArray<Instruction>.Builder builder, Ast.Expression expression) => expression switch
     {
@@ -279,6 +292,7 @@ public class TackyGenerator(Ast.Program ast)
         Ast.Expressions.Prefix prefix => EmitPrefix(builder, prefix),
         Ast.Expressions.Postfix postfix => EmitPostfix(builder, postfix),
         Ast.Expressions.Conditional conditional => EmitConditional(builder, conditional),
+        Ast.Expressions.FunctionCall functionCall => EmitFunctionCall(builder, functionCall),
         _ => throw new NotImplementedException()
     };
 
@@ -379,6 +393,24 @@ public class TackyGenerator(Ast.Program ast)
         var elseResult = EmitExpression(builder, conditional.Else);
         builder.Add(new Copy(elseResult, destination));
         builder.Add(new Label(endLabel));
+
+        return destination;
+    }
+
+    private static Variable EmitFunctionCall(ImmutableArray<Instruction>.Builder builder, Ast.Expressions.FunctionCall functionCall)
+    {
+        var destinationName = UniqueId.MakeTemporary();
+        var destination = new Variable(destinationName);
+
+        var argumentBuilder = ImmutableArray.CreateBuilder<Operand>();
+
+        foreach (var argument in functionCall.Arguments)
+        {
+            var argumentResult = EmitExpression(builder, argument);
+            argumentBuilder.Add(argumentResult);
+        }
+
+        builder.Add(new FunctionCall(functionCall.Name, argumentBuilder.ToImmutable(), destination));
 
         return destination;
     }

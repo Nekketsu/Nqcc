@@ -1,6 +1,8 @@
-﻿namespace Nqcc.Tacky;
+﻿using System.Collections.Immutable;
 
-public class Program(Function functionDefinition) : TackyNode
+namespace Nqcc.Tacky;
+
+public class Program(ImmutableArray<FunctionDefinition> functionDefinitions) : TackyNode
 {
-    public Function FunctionDefinition { get; } = functionDefinition;
+    public ImmutableArray<FunctionDefinition> FunctionDefinitions { get; } = functionDefinitions;
 }

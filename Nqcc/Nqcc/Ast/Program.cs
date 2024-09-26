@@ -1,6 +1,9 @@
-﻿namespace Nqcc.Ast;
+﻿using Nqcc.Ast.Declarations;
+using System.Collections.Immutable;
 
-public class Program(Function functionDefinition) : SyntaxNode
+namespace Nqcc.Ast;
+
+public class Program(ImmutableArray<FunctionDeclaration> functionDeclarations) : SyntaxNode
 {
-    public Function FunctionDefinition { get; } = functionDefinition;
+    public ImmutableArray<FunctionDeclaration> FunctionDeclarations { get; } = functionDeclarations;
 }

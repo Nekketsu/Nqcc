@@ -9,35 +9,67 @@ using System.Collections.Immutable;
 
 namespace Nqcc.Backend;
 
-public class TackyToAssemblyConverter(Tacky.Program tacky)
+public class TackyToAssemblyConverter(Tacky.Program tacky, Register[]? registers = null)
 {
+    private readonly Register[] registers = registers ?? [new DI(), new SI(), new DX(), new CX(), new R8(), new R9()];
+
     public Program Convert() => ConvertProgram(tacky);
 
-    private static Program ConvertProgram(Tacky.Program program)
+    private Program ConvertProgram(Tacky.Program program)
     {
-        var function = ConvertFunction(program.FunctionDefinition);
-        return new Program(function);
+        var builder = ImmutableArray.CreateBuilder<FunctionDefinition>();
+
+        foreach (var functionDefinition in program.FunctionDefinitions)
+        {
+            builder.Add(ConvertFunctionDefinition(functionDefinition));
+        }
+
+        return new Program(builder.ToImmutable());
     }
 
-    private static Function ConvertFunction(Tacky.Function function)
-    {
-        var body = ConvertInstructions(function.Body);
-        return new Function(function.Name, body);
-    }
-
-    private static ImmutableArray<Instruction> ConvertInstructions(ImmutableArray<Tacky.Instruction> instructions)
+    private FunctionDefinition ConvertFunctionDefinition(Tacky.FunctionDefinition functionDefinition)
     {
         var builder = ImmutableArray.CreateBuilder<Instruction>();
 
+        ConvertParameters(builder, functionDefinition.Parameters);
+        ConvertInstructions(builder, functionDefinition.Body);
+
+        return new FunctionDefinition(functionDefinition.Name, builder.ToImmutable());
+    }
+
+    private void ConvertParameters(ImmutableArray<Instruction>.Builder builder, ImmutableArray<string> parameters)
+    {
+        var registerParameters = parameters.Take(registers.Length);
+        var stackParameters = parameters.Skip(registers.Length);
+
+        var registerIndex = 0;
+        foreach (var registerParameter in registerParameters)
+        {
+            var register = registers[registerIndex];
+            builder.Add(new Mov(register, new PseudoRegister(registerParameter)));
+
+            registerIndex++;
+        }
+
+        var stackIndex = 0;
+        foreach (var stackParameter in stackParameters)
+        {
+            var stack = new Stack(16 + (8 * stackIndex));
+            builder.Add(new Mov(stack, new PseudoRegister(stackParameter)));
+
+            stackIndex++;
+        }
+    }
+
+    private void ConvertInstructions(ImmutableArray<Instruction>.Builder builder, ImmutableArray<Tacky.Instruction> instructions)
+    {
         foreach (var instruction in instructions)
         {
             builder.AddRange(ConvertInstrution(instruction));
         }
-
-        return builder.ToImmutable();
     }
 
-    private static Instruction[] ConvertInstrution(Tacky.Instruction instruction) => instruction switch
+    private Instruction[] ConvertInstrution(Tacky.Instruction instruction) => instruction switch
     {
         Tacky.Instructions.Return @return => ConvertReturnInstruction(@return),
         Tacky.Instructions.Unary unary => ConvertUnaryInstruction(unary),
@@ -47,6 +79,7 @@ public class TackyToAssemblyConverter(Tacky.Program tacky)
         Tacky.Instructions.JumpIfNotZero jumpIfNotZero => ConvertJumpIfNotZeroInstruction(jumpIfNotZero),
         Tacky.Instructions.Copy copy => ConvertCopyInstruction(copy),
         Tacky.Instructions.Label label => ConvertLabelInstruction(label),
+        Tacky.Instructions.FunctionCall functioncall => ConvertFunctionCall(functioncall),
         _ => throw new NotImplementedException()
     };
 
@@ -161,6 +194,59 @@ public class TackyToAssemblyConverter(Tacky.Program tacky)
     [
         new Label(label.Identifier)
     ];
+
+    private Instruction[] ConvertFunctionCall(Tacky.Instructions.FunctionCall functioncall)
+    {
+        var instructions = new List<Instruction>();
+
+        var registerArguments = functioncall.Arguments.Take(registers.Length).ToArray();
+        var stackArguments = functioncall.Arguments.Skip(registers.Length).ToArray();
+        var stackPadding = stackArguments.Length % 2 == 0 ? 0 : 8;
+
+        if (stackPadding > 0)
+        {
+            instructions.Add(new AllocateStack(stackPadding));
+        }
+
+        var registerIndex = 0;
+        foreach (var registerArgumnet in registerArguments)
+        {
+            var register = registers[registerIndex];
+            var assemblyArgument = ConvertOperand(registerArgumnet);
+            instructions.Add(new Mov(assemblyArgument, register));
+
+            registerIndex++;
+        }
+
+        foreach (var stackArgument in stackArguments.Reverse())
+        {
+            var assemblyArgument = ConvertOperand(stackArgument);
+            Instruction[] argumentInstructions = assemblyArgument switch
+            {
+                Imm or Register => [new Push(assemblyArgument)],
+                _ =>
+                [
+                    new Mov(assemblyArgument, new AX()),
+                    new Push(new AX())
+                ]
+            };
+
+            instructions.AddRange(argumentInstructions);
+        }
+
+        instructions.Add(new Call(functioncall.Name));
+
+        var bytesToRemove = (8 * stackArguments.Length) + stackPadding;
+        if (bytesToRemove > 0)
+        {
+            instructions.Add(new DeallocateStack(bytesToRemove));
+        }
+
+        var assemblyDestination = ConvertOperand(functioncall.Destination);
+        instructions.Add(new Mov(new AX(), assemblyDestination));
+
+        return [.. instructions];
+    }
 
     private static UnaryOperator ConvertUnaryOperator(Tacky.UnaryOperator @operator) => @operator switch
     {

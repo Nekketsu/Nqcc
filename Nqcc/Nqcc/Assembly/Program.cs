@@ -1,6 +1,8 @@
-﻿namespace Nqcc.Assembly;
+﻿using System.Collections.Immutable;
 
-public class Program(Function functionDefinition)
+namespace Nqcc.Assembly;
+
+public class Program(ImmutableArray<FunctionDefinition> functionDefinitions)
 {
-    public Function FunctionDefinition { get; } = functionDefinition;
+    public ImmutableArray<FunctionDefinition> FunctionDefinitions { get; } = functionDefinitions;
 }

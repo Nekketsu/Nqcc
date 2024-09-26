@@ -19,8 +19,8 @@ public abstract class TackyNode
             case Program program:
                 PrettyPrintProgram(writer, program, indent);
                 break;
-            case Function function:
-                PrettyPrintFunction(writer, function, indent);
+            case FunctionDefinition functionDefinition:
+                PrettyPrintFunctionDefinition(writer, functionDefinition, indent);
                 break;
             case Return @return:
                 PrettyPrintReturn(writer, @return, indent);
@@ -58,18 +58,24 @@ public abstract class TackyNode
             case Label label:
                 PrettyPrintLabel(writer, label, indent);
                 break;
+            case FunctionCall functionCall:
+                PrettyPrintFunctionCall(writer, functionCall, indent);
+                break;
         }
     }
 
     private static void PrettyPrintProgram(TextWriter writer, Program program, int indent)
     {
-        program.FunctionDefinition.PrettyPrint(writer, indent);
+        foreach (var functionDefinition in program.FunctionDefinitions)
+        {
+            functionDefinition.PrettyPrint(writer, indent);
+        }
     }
 
-    private static void PrettyPrintFunction(TextWriter writer, Function function, int indent)
+    private static void PrettyPrintFunctionDefinition(TextWriter writer, FunctionDefinition functionDefinition, int indent)
     {
-        WriteLine(writer, $"{function.Name}(", indent);
-        foreach (var instruction in function.Body)
+        WriteLine(writer, $"{functionDefinition.Name}({string.Join(", ", functionDefinition.Parameters)})", indent);
+        foreach (var instruction in functionDefinition.Body)
         {
             instruction.PrettyPrint(writer, indent + 1);
         }
@@ -183,6 +189,11 @@ public abstract class TackyNode
     private static void PrettyPrintLabel(TextWriter writer, Label label, int indent)
     {
         WriteLine(writer, $"{label.Identifier}:", indent);
+    }
+
+    private static void PrettyPrintFunctionCall(TextWriter writer, FunctionCall functionCall, int indent)
+    {
+        WriteLine(writer, $"{functionCall.Name}({string.Join(", ", functionCall.Arguments)})", indent);
     }
 
     private static void WriteLine(TextWriter writer, string text, int indent)
