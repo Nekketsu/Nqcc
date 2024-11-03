@@ -4,6 +4,7 @@ using Nqcc.Assembly.ConditionCodes;
 using Nqcc.Assembly.Instructions;
 using Nqcc.Assembly.Operands;
 using Nqcc.Assembly.Operands.Registers;
+using Nqcc.Assembly.TopLevels;
 using Nqcc.Assembly.UnaryOperators;
 using Nqcc.Compiling;
 
@@ -15,24 +16,37 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
 
     private static string GetLabelName(string name)
     {
-        return $"L{name.Replace('.', '_')}";
+        return $"{name.Replace('.', '_')}";
     }
 
     private void EmitProgram(Program program)
     {
-        writer.WriteLine(".code");
-        writer.WriteLine();
-        foreach (var functionDefinition in program.FunctionDefinitions)
+        foreach (var topLevel in program.TopLevels)
         {
-            EmitFunction(functionDefinition);
+            EmitTopLevel(topLevel);
             writer.WriteLine();
         }
+
         writer.WriteLine();
         writer.WriteLine("END");
     }
 
-    private void EmitFunction(FunctionDefinition functionDefinition)
+    private void EmitTopLevel(TopLevel topLevel)
     {
+        switch (topLevel)
+        {
+            case Function function:
+                EmitFunction(function);
+                break;
+            case StaticVariable staticVariable:
+                EmitStaticVariable(staticVariable);
+                break;
+        }
+    }
+
+    private void EmitFunction(Function functionDefinition)
+    {
+        writer.WriteLine("\t.code");
         writer.WriteLine($"PUBLIC\t{functionDefinition.Name}");
         writer.WriteLine($"{functionDefinition.Name}\tPROC");
         writer.WriteLine("\tpush\trbp");
@@ -44,6 +58,33 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         }
 
         writer.WriteLine($"{functionDefinition.Name}\tENDP");
+    }
+    private void EmitStaticVariable(StaticVariable staticVariable)
+    {
+        if (staticVariable.InitialValue == 0)
+        {
+            EmitZeroInitializedStaticVariable(staticVariable);
+        }
+        else
+        {
+            EmitNonZeroInitializedStaticVariable(staticVariable);
+        }
+    }
+
+    private void EmitZeroInitializedStaticVariable(StaticVariable staticVariable)
+    {
+        var name = GetLabelName(staticVariable.Name);
+        writer.WriteLine("\t.data?");
+        writer.WriteLine("\talign\t4");
+        writer.WriteLine($"{name}\tdword");
+    }
+
+    private void EmitNonZeroInitializedStaticVariable(StaticVariable staticVariable)
+    {
+        var name = GetLabelName(staticVariable.Name);
+        writer.WriteLine("\t.data");
+        writer.WriteLine("\talign\t4");
+        writer.WriteLine($"{name}\tdword\t{staticVariable.InitialValue}");
     }
 
     private void EmitInstruction(Instruction instruction)
@@ -208,6 +249,7 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
         Register register => ShowRegisterOperand(register),
         Stack stack => ShowStackOperand(stack),
         Imm imm => ShowImmOperand(imm),
+        Data data => ShowDataOperand(data),
         _ => throw new NotImplementedException()
     };
 
@@ -247,6 +289,8 @@ public class CodeEmitter(TextWriter writer) : ICodeEmitter
     };
 
     private static string ShowImmOperand(Imm imm) => $"{imm.Value}";
+
+    private static string ShowDataOperand(Data data) => GetLabelName(data.Name);
 
     private static string ShowByteRegisterOperand(Register register) => register switch
     {

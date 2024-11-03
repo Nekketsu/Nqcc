@@ -2,6 +2,7 @@
 using Nqcc.Ast.Declarations;
 using Nqcc.Ast.Expressions;
 using Nqcc.Ast.ForInits;
+using Nqcc.Ast.StorageClasses;
 using System.Collections.Immutable;
 
 namespace Nqcc.Compiling.SemanticAnalysis;
@@ -14,14 +15,28 @@ public class IdentifierResolver(Program ast)
 
     private Program ResolveProgram(Program program)
     {
-        var builder = ImmutableArray.CreateBuilder<FunctionDeclaration>();
+        var builder = ImmutableArray.CreateBuilder<Declaration>();
 
-        foreach (var functionDeclaration in program.FunctionDeclarations)
+        foreach (var declaration in program.Declarations)
         {
-            builder.Add(ResolveFunctionDeclaration(functionDeclaration));
+            builder.Add(ResolveGlobalDeclaration(declaration));
         }
 
         return new Program(builder.ToImmutable());
+    }
+
+    private Declaration ResolveGlobalDeclaration(Declaration declaration) => declaration switch
+    {
+        FunctionDeclaration functionDeclaration => ResolveFunctionDeclaration(functionDeclaration),
+        VariableDeclaration variableDeclaration => ResolveFileScopedVariableDeclaration(variableDeclaration),
+        _ => throw new NotImplementedException()
+    };
+
+    private VariableDeclaration ResolveFileScopedVariableDeclaration(VariableDeclaration variableDeclaration)
+    {
+        identifierMap[variableDeclaration.Name] = new Identifier(variableDeclaration.Name, true);
+
+        return variableDeclaration;
     }
 
     private Block ResolveBlock(Block block)
@@ -106,7 +121,7 @@ public class IdentifierResolver(Program ast)
     private ForInit ResolveForInit(ForInit init) => init switch
     {
         InitExpression initExpression => new InitExpression(ResolveOptionalExpression(initExpression.Expression)),
-        InitDeclaration initDeclaration => new InitDeclaration(ResolveVariableDeclaration(initDeclaration.Declaration)),
+        InitDeclaration initDeclaration => new InitDeclaration(ResolveLocalVariableDeclaration(initDeclaration.Declaration)),
         _ => throw new NotImplementedException()
     };
 
@@ -118,27 +133,39 @@ public class IdentifierResolver(Program ast)
 
     private Declaration ResolveLocalDeclaration(Declaration declaration) => declaration switch
     {
-        VariableDeclaration variableDeclaration => ResolveVariableDeclaration(variableDeclaration),
+        VariableDeclaration variableDeclaration => ResolveLocalVariableDeclaration(variableDeclaration),
         FunctionDeclaration { Body: not null } => throw new Exception("Nested function definitions are not allowed"),
+        FunctionDeclaration { StorageClass: Static } => throw new Exception("Static keyword not allowed on local function delcarations"),
         FunctionDeclaration functionDeclaration => ResolveFunctionDeclaration(functionDeclaration),
         _ => throw new NotImplementedException()
 
     };
 
-    private VariableDeclaration ResolveVariableDeclaration(VariableDeclaration variableDeclaration)
+    private VariableDeclaration ResolveLocalVariableDeclaration(VariableDeclaration variableDeclaration)
     {
-        if (identifierMap.ContainsInCurrentScope(variableDeclaration.Name))
+        if (identifierMap.TryGetValue(variableDeclaration.Name, out var identifer))
         {
-            throw new Exception("Duplicate variable declaration!");
+            if (identifer.FromCurrentScope && !(identifer.HasLinkage && variableDeclaration.StorageClass is Extern))
+            {
+                throw new Exception("Duplicate variable declaration!");
+            }
         }
+        if (variableDeclaration.StorageClass is Extern)
+        {
+            identifierMap[variableDeclaration.Name] = new Identifier(variableDeclaration.Name, true);
 
-        var uniqueName = UniqueId.MakeTemporary();
-        identifierMap[variableDeclaration.Name] = new Identifier(uniqueName);
-        var initializer = variableDeclaration.Initializer is null
-            ? null
-            : ResolveExpression(variableDeclaration.Initializer);
+            return variableDeclaration;
+        }
+        else
+        {
+            var uniqueName = UniqueId.MakeTemporary();
+            identifierMap[variableDeclaration.Name] = new Identifier(uniqueName);
+            var initializer = variableDeclaration.Initializer is null
+                ? null
+                : ResolveExpression(variableDeclaration.Initializer);
 
-        return new VariableDeclaration(uniqueName, initializer);
+            return new VariableDeclaration(uniqueName, initializer, variableDeclaration.StorageClass);
+        }
     }
 
     private FunctionDeclaration ResolveFunctionDeclaration(FunctionDeclaration functionDeclaration)
@@ -161,7 +188,7 @@ public class IdentifierResolver(Program ast)
         var body = functionDeclaration.Body is null ? null : ResolveBlock(functionDeclaration.Body);
         identifierMap.Pop();
 
-        return new FunctionDeclaration(functionDeclaration.Name, builder.ToImmutable(), body);
+        return new FunctionDeclaration(functionDeclaration.Name, builder.ToImmutable(), body, functionDeclaration.StorageClass);
     }
 
     private string ResolveParameter(string parameter)

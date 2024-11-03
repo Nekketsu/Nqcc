@@ -4,6 +4,7 @@ using Nqcc.Assembly.ConditionCodes;
 using Nqcc.Assembly.Instructions;
 using Nqcc.Assembly.Operands;
 using Nqcc.Assembly.Operands.Registers;
+using Nqcc.Assembly.TopLevels;
 using Nqcc.Assembly.UnaryOperators;
 using System.Collections.Immutable;
 
@@ -17,25 +18,34 @@ public class TackyToAssemblyConverter(Tacky.Program tacky, Register[]? registers
 
     private Program ConvertProgram(Tacky.Program program)
     {
-        var builder = ImmutableArray.CreateBuilder<FunctionDefinition>();
+        var builder = ImmutableArray.CreateBuilder<TopLevel>();
 
-        foreach (var functionDefinition in program.FunctionDefinitions)
+        foreach (var topLevel in program.TopLevels)
         {
-            builder.Add(ConvertFunctionDefinition(functionDefinition));
+            builder.Add(ConvertTopLevel(topLevel));
         }
 
         return new Program(builder.ToImmutable());
     }
 
-    private FunctionDefinition ConvertFunctionDefinition(Tacky.FunctionDefinition functionDefinition)
+    private TopLevel ConvertTopLevel(Tacky.TopLevel topLevel) => topLevel switch
+    {
+        Tacky.TopLevels.Function function => ConvertFunction(function),
+        Tacky.TopLevels.StaticVariable staticVariable => ConvertStaticVariable(staticVariable),
+        _ => throw new NotImplementedException()
+    };
+
+    private Function ConvertFunction(Tacky.TopLevels.Function function)
     {
         var builder = ImmutableArray.CreateBuilder<Instruction>();
 
-        ConvertParameters(builder, functionDefinition.Parameters);
-        ConvertInstructions(builder, functionDefinition.Body);
+        ConvertParameters(builder, function.Parameters);
+        ConvertInstructions(builder, function.Body);
 
-        return new FunctionDefinition(functionDefinition.Name, builder.ToImmutable());
+        return new Function(function.Name, function.Global, builder.ToImmutable());
     }
+
+    private StaticVariable ConvertStaticVariable(Tacky.TopLevels.StaticVariable staticVariable) => new StaticVariable(staticVariable.Name, staticVariable.Global, staticVariable.InitialValue);
 
     private void ConvertParameters(ImmutableArray<Instruction>.Builder builder, ImmutableArray<string> parameters)
     {

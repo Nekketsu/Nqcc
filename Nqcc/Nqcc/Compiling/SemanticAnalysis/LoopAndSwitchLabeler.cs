@@ -14,11 +14,19 @@ public class LoopAndSwitchLabeler(Program ast)
 
     private Program LabelProgram(Program program)
     {
-        var builder = ImmutableArray.CreateBuilder<FunctionDeclaration>();
+        var builder = ImmutableArray.CreateBuilder<Declaration>();
 
-        foreach (var functionDeclaration in program.FunctionDeclarations)
+        foreach (var declaration in program.Declarations)
         {
-            builder.Add(LabelFunctionDeclaration(functionDeclaration));
+            switch (declaration)
+            {
+                case FunctionDeclaration functionDeclaration:
+                    builder.Add(LabelFunctionDeclaration(functionDeclaration));
+                    break;
+                case VariableDeclaration variableDeclaration:
+                    builder.Add(declaration);
+                    break;
+            }
         }
 
         return new Program(builder.ToImmutable());
@@ -28,7 +36,7 @@ public class LoopAndSwitchLabeler(Program ast)
     {
         var body = functionDeclaration.Body is null ? null : LabelBlock(functionDeclaration.Body);
 
-        return new FunctionDeclaration(functionDeclaration.Name, functionDeclaration.Parameters, body);
+        return new FunctionDeclaration(functionDeclaration.Name, functionDeclaration.Parameters, body, functionDeclaration.StorageClass);
     }
 
     private Block LabelBlock(Block block)

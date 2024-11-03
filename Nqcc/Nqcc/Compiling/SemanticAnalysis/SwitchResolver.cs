@@ -27,11 +27,19 @@ public class SwitchResolver(Program ast)
 
     private Program ResolveProgram(Program program)
     {
-        var builder = ImmutableArray.CreateBuilder<FunctionDeclaration>();
+        var builder = ImmutableArray.CreateBuilder<Declaration>();
 
-        foreach (var functionDeclaration in program.FunctionDeclarations)
+        foreach (var declaration in program.Declarations)
         {
-            builder.Add(ResolveFunctionDeclaration(functionDeclaration));
+            switch (declaration)
+            {
+                case FunctionDeclaration functionDeclaration:
+                    builder.Add(ResolveFunctionDeclaration(functionDeclaration));
+                    break;
+                case VariableDeclaration variableDeclaration:
+                    builder.Add(variableDeclaration);
+                    break;
+            }
         }
 
         return new Program(builder.ToImmutable());
@@ -41,7 +49,7 @@ public class SwitchResolver(Program ast)
     {
         var block = functionDeclaration.Body is null ? null : ResolveBlock(functionDeclaration.Body);
 
-        return new FunctionDeclaration(functionDeclaration.Name, functionDeclaration.Parameters, block);
+        return new FunctionDeclaration(functionDeclaration.Name, functionDeclaration.Parameters, block, functionDeclaration.StorageClass);
     }
 
     private Block ResolveBlock(Block block)

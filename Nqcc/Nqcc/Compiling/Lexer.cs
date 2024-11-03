@@ -229,6 +229,8 @@ public class Lexer(string code) : IEnumerable<SyntaxToken>
             "switch" => new Keywords.Switch(CurrentTokenText),
             "case" => new Keywords.Case(CurrentTokenText),
             "default" => new Keywords.Default(CurrentTokenText),
+            "static" => new Keywords.Static(CurrentTokenText),
+            "extern" => new Keywords.Extern(CurrentTokenText),
             _ => new Identifier(CurrentTokenText)
         };
 
