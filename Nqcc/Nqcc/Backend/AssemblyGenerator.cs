@@ -7,7 +7,7 @@ public class AssemblyGenerator(SymbolTable symbols, Tacky.Program tacky)
 {
     public Program Generate()
     {
-        TackyToAssemblyConverter converter = GetTackyToAssemblyConverter(tacky);
+        var converter = GetTackyToAssemblyConverter(tacky);
         var converted = converter.Convert();
 
         var replacer = new PseudoRegisterReplacer(symbols, converted);

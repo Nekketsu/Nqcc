@@ -2,7 +2,7 @@
 
 namespace Nqcc.Tacky;
 
-public class Program(ImmutableArray<FunctionDefinition> functionDefinitions) : TackyNode
+public class Program(ImmutableArray<TopLevel> topLevels) : TackyNode
 {
-    public ImmutableArray<FunctionDefinition> FunctionDefinitions { get; } = functionDefinitions;
+    public ImmutableArray<TopLevel> TopLevels { get; } = topLevels;
 }

@@ -1,46 +1,89 @@
-﻿using Nqcc.Tacky;
+﻿using Nqcc.Symbols.InitialValues;
+using Nqcc.Tacky;
 using Nqcc.Tacky.BinaryOperators;
 using Nqcc.Tacky.BinaryOperators.RelationalOperators;
 using Nqcc.Tacky.Instructions;
 using Nqcc.Tacky.Operands;
+using Nqcc.Tacky.TopLevels;
 using Nqcc.Tacky.UnaryOperators;
 using System.Collections.Immutable;
 
 namespace Nqcc.Compiling;
 
-public class TackyGenerator(Ast.Program ast)
+public class TackyGenerator(Symbols.SymbolTable symbols, Ast.Program ast)
 {
     public Program Generate() => EmitProgram(ast);
 
-    private static Program EmitProgram(Ast.Program program)
+    private Program EmitProgram(Ast.Program program)
     {
-        var builder = ImmutableArray.CreateBuilder<FunctionDefinition>();
+        var functionDefinitions = EmitFunctionDefinitions(program.Declarations.OfType<Ast.Declarations.FunctionDeclaration>());
+        var variableDefinitions = EmitVariableDefinitions();
 
-        foreach (var functionDeclaration in program.FunctionDeclarations)
+        return new Program([.. variableDefinitions, .. functionDefinitions]);
+    }
+
+    private ImmutableArray<Function> EmitFunctionDefinitions(IEnumerable<Ast.Declarations.FunctionDeclaration> declarations)
+    {
+        var builder = ImmutableArray.CreateBuilder<Function>();
+
+        foreach (var declaration in declarations)
         {
-            var functionDefinition = EmitFunctionDeclaration(functionDeclaration);
-            if (functionDefinition is not null)
+            EmitFunctionDeclaration(builder, declaration);
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private ImmutableArray<StaticVariable> EmitVariableDefinitions()
+    {
+        var builder = ImmutableArray.CreateBuilder<StaticVariable>();
+
+        foreach (var symbol in symbols)
+        {
+            if (symbol is Symbols.Variable { Attributes: Symbols.IdentifierAttributes.StaticAttributes attributes })
             {
-                builder.Add(functionDefinition);
+                switch (attributes.InitialValue)
+                {
+                    case Initial initial:
+                        builder.Add(new StaticVariable(symbol.Name, attributes.Global, initial.Value));
+                        break;
+                    case Tentative:
+                        builder.Add(new StaticVariable(symbol.Name, attributes.Global, 0));
+                        break;
+                }
             }
         }
 
-        return new Program(builder.ToImmutable());
+        return builder.ToImmutable();
     }
 
-    private static FunctionDefinition? EmitFunctionDeclaration(Ast.Declarations.FunctionDeclaration functionDeclaration)
+    private void EmitFunctionDeclaration(ImmutableArray<Function>.Builder builder, Ast.Declaration declaration)
+    {
+        if (declaration is Ast.Declarations.FunctionDeclaration functionDeclaration)
+        {
+            var function = EmitFunctionDeclaration(functionDeclaration);
+            if (function is not null)
+            {
+                builder.Add(function);
+            }
+        }
+    }
+
+    private Function? EmitFunctionDeclaration(Ast.Declarations.FunctionDeclaration functionDeclaration)
     {
         var builder = ImmutableArray.CreateBuilder<Instruction>();
 
-        if (functionDeclaration.Body is not null)
+        if (functionDeclaration.Body is null)
         {
-            EmitBlock(builder, functionDeclaration.Body);
-            builder.Add(new Return(new Constant(0)));
-
-            return new FunctionDefinition(functionDeclaration.Name, functionDeclaration.Parameters, builder.ToImmutable());
+            return null;
         }
 
-        return null;
+        EmitBlock(builder, functionDeclaration.Body);
+        builder.Add(new Return(new Constant(0)));
+
+        var global = symbols.GetFunction(functionDeclaration.Name).Attributes.Global;
+
+        return new Function(functionDeclaration.Name, global, functionDeclaration.Parameters, builder.ToImmutable());
     }
 
     private static void EmitBlock(ImmutableArray<Instruction>.Builder builder, Ast.Block block)
@@ -115,7 +158,17 @@ public class TackyGenerator(Ast.Program ast)
 
     private static void EmitDeclaration(ImmutableArray<Instruction>.Builder builder, Ast.Declaration declaration)
     {
-        if (declaration is Ast.Declarations.VariableDeclaration variableDeclaration && variableDeclaration.Initializer is not null)
+        switch (declaration)
+        {
+            case Ast.Declarations.VariableDeclaration { StorageClass: null } variableDeclaration:
+                EmitVariableDeclaration(builder, variableDeclaration);
+                break;
+        }
+    }
+
+    private static void EmitVariableDeclaration(ImmutableArray<Instruction>.Builder builder, Ast.Declarations.VariableDeclaration variableDeclaration)
+    {
+        if (variableDeclaration.Initializer is not null)
         {
             EmitExpression(builder, new Ast.Expressions.Assignment(new Ast.Expressions.Variable(variableDeclaration.Name), variableDeclaration.Initializer));
         }

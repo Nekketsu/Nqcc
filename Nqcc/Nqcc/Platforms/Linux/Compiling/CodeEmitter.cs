@@ -10,10 +10,12 @@ public class CodeEmitter(SymbolTable symbols, TextWriter writer) : Nqcc.Compilin
 
     protected override string GetFunctionName(string name)
     {
-        var function = (Function)symbols[name];
+        var function = symbols.GetFunction(name);
 
-        return function.IsDefined ? name : $"{name}@PLT";
+        return function.Attributes.Defined ? name : $"{name}@PLT";
     }
+
+    protected override string GetAlignDirective(int alignment) => $".align {alignment}";
 
     protected override void EmitStackNote()
     {

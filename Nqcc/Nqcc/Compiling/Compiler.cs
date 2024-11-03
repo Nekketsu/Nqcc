@@ -8,7 +8,7 @@ namespace Nqcc.Compiling;
 
 public abstract class Compiler : ICompiler
 {
-    protected readonly SymbolTable symbols = new();
+    protected readonly SymbolTable symbols = [];
 
     public async Task<string> CompileAsync(string preprocessedFile, Stage stage = Stage.Codegen)
     {
@@ -32,7 +32,7 @@ public abstract class Compiler : ICompiler
 
         if (stage < Stage.Tacky) { return assemblyFile; }
 
-        var tackyGenerator = new TackyGenerator(analyzedAst);
+        var tackyGenerator = new TackyGenerator(symbols, analyzedAst);
         var tacky = tackyGenerator.Generate();
 
         if (stage < Stage.Codegen) { return assemblyFile; }
@@ -52,5 +52,5 @@ public abstract class Compiler : ICompiler
 
     protected abstract ICodeEmitter GetCodeEmitter(TextWriter writer);
 
-    protected virtual AssemblyGenerator GetAssemblyGenerator(Program tacky) => new AssemblyGenerator(symbols, tacky);
+    protected virtual AssemblyGenerator GetAssemblyGenerator(Program tacky) => new(symbols, tacky);
 }

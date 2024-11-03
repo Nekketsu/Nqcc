@@ -2,7 +2,7 @@
 
 namespace Nqcc.Assembly;
 
-public class Program(ImmutableArray<FunctionDefinition> functionDefinitions)
+public class Program(ImmutableArray<TopLevel> topLevels)
 {
-    public ImmutableArray<FunctionDefinition> FunctionDefinitions { get; } = functionDefinitions;
+    public ImmutableArray<TopLevel> TopLevels { get; } = topLevels;
 }

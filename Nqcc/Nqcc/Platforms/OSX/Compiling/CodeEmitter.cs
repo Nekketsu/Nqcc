@@ -11,4 +11,6 @@ public class CodeEmitter(TextWriter writer) : Nqcc.Compiling.CodeEmitter(writer)
     protected override void EmitStackNote()
     {
     }
+
+    protected override string GetAlignDirective(int alignment) => $".balign {alignment}";
 }

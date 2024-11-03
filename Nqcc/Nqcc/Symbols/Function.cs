@@ -1,8 +1,11 @@
-﻿namespace Nqcc.Symbols;
+﻿using Nqcc.Symbols.IdentifierAttributes;
+using Nqcc.Symbols.Types;
 
-public class Function(string name, int parameterCount, bool isDefined, int stackSize = 0) : Symbol(name)
+namespace Nqcc.Symbols;
+
+public class Function(string name, FunctionType functionType, FunctionAttributes attributes, int stackSize = 0) : Symbol(name)
 {
-    public int ParameterCount { get; } = parameterCount;
-    public bool IsDefined { get; } = isDefined;
+    public FunctionType FunctionType { get; } = functionType;
+    public FunctionAttributes Attributes { get; } = attributes;
     public int StackSize { get; } = stackSize;
 }

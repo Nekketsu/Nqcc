@@ -58,21 +58,21 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
 
     private Program ParseProgram()
     {
-        var builder = ImmutableArray.CreateBuilder<FunctionDeclaration>();
+        var builder = ImmutableArray.CreateBuilder<Declaration>();
 
         while (!IsEof)
         {
-            builder.Add(ParseFunctionDeclaration());
+            builder.Add(ParseDeclaration());
         }
 
         return new Program(builder.ToImmutable());
     }
 
-    private FunctionDeclaration ParseFunctionDeclaration(Identifier? name = null)
+    private FunctionDeclaration ParseFunctionDeclaration(StorageClass? storageClass = null, Identifier? name = null)
     {
         if (name is null)
         {
-            Expect<Int>();
+            storageClass = ParseTypeAndStorage();
             name = Expect<Identifier>();
         }
         Expect<OpenParenthesis>();
@@ -88,7 +88,7 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
             Expect<Semicolon>();
         }
 
-        return new FunctionDeclaration(name.Text, parameters, body);
+        return new FunctionDeclaration(name.Text, parameters, body, storageClass);
     }
 
     private ImmutableArray<string> ParseParameters()
@@ -140,32 +140,65 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         return new Block(blockItems.ToImmutable());
     }
 
-    private BlockItem ParseBlockItem() => Current switch
-    {
-        Int => new Ast.BlockItems.Declaration(ParseDeclaration()),
-        _ => new Ast.BlockItems.Statement(ParseStatement())
-    };
+    private BlockItem ParseBlockItem() => IsSpecifier(Current)
+        ? new Ast.BlockItems.Declaration(ParseDeclaration())
+        : new Ast.BlockItems.Statement(ParseStatement());
 
     private Declaration ParseDeclaration()
     {
-        Expect<Int>();
+        var storageClass = ParseTypeAndStorage();
         var name = Expect<Identifier>();
 
         if (Current is not OpenParenthesis)
         {
-            return ParseVariableDeclaration(name);
+            return ParseVariableDeclaration(storageClass, name);
         }
         else
         {
-            return ParseFunctionDeclaration(name);
+            return ParseFunctionDeclaration(storageClass, name);
         }
     }
 
-    private VariableDeclaration ParseVariableDeclaration(Identifier? name = null)
+    private StorageClass? ParseTypeAndStorage()
+    {
+        var typeCount = 0;
+        var storageClasses = new List<StorageClass>();
+
+        do
+        {
+            switch (TakeToken())
+            {
+                case Int:
+                    typeCount++;
+                    break;
+                case Static:
+                    storageClasses.Add(new Ast.StorageClasses.Static());
+                    break;
+                case Extern:
+                    storageClasses.Add(new Ast.StorageClasses.Extern());
+                    break;
+            }
+        } while (IsSpecifier(Current));
+
+        if (typeCount != 1)
+        {
+            throw new Exception("Invalid type specifier");
+        }
+        if (storageClasses.Count > 1)
+        {
+            throw new Exception("Invalid storage class");
+        }
+
+        return storageClasses.Count == 1
+            ? storageClasses.Single()
+            : null;
+    }
+
+    private VariableDeclaration ParseVariableDeclaration(StorageClass? storageClass = null, Identifier? name = null)
     {
         if (name is null)
         {
-            Expect<Int>();
+            storageClass = ParseTypeAndStorage();
             name = Expect<Identifier>();
         }
 
@@ -177,14 +210,12 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
             _ => throw new Exception($"Expected an initializer or semicolon but found \"{Current}\"")
         };
 
-        return new VariableDeclaration(name.Text, initializer);
+        return new VariableDeclaration(name.Text, initializer, storageClass);
     }
 
-    private ForInit ParseForInit() => Current switch
-    {
-        Int => new Ast.ForInits.InitDeclaration(ParseVariableDeclaration()),
-        _ => new Ast.ForInits.InitExpression(ParseOptionalExpression<Semicolon>())
-    };
+    private ForInit ParseForInit() => IsSpecifier(Current)
+        ? new Ast.ForInits.InitDeclaration(ParseVariableDeclaration())
+        : new Ast.ForInits.InitExpression(ParseOptionalExpression<Semicolon>());
 
     private Expression ParseInitializer()
     {
@@ -603,4 +634,6 @@ public class Parser(ImmutableArray<SyntaxToken> tokens)
         MinusMinus => new Ast.PostfixOperators.Decrement(),
         _ => throw new NotImplementedException()
     };
+
+    private static bool IsSpecifier(SyntaxToken token) => token is Int or Static or Extern;
 }

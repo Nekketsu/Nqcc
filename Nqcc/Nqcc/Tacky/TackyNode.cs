@@ -1,6 +1,7 @@
 ﻿using Nqcc.Tacky.BinaryOperators;
 using Nqcc.Tacky.Instructions;
 using Nqcc.Tacky.Operands;
+using Nqcc.Tacky.TopLevels;
 using Nqcc.Tacky.UnaryOperators;
 
 namespace Nqcc.Tacky;
@@ -19,8 +20,11 @@ public abstract class TackyNode
             case Program program:
                 PrettyPrintProgram(writer, program, indent);
                 break;
-            case FunctionDefinition functionDefinition:
-                PrettyPrintFunctionDefinition(writer, functionDefinition, indent);
+            case Function function:
+                PrettyPrintFunction(writer, function, indent);
+                break;
+            case StaticVariable staticVariable:
+                PrettyPrintStaticVariable(writer, staticVariable, indent);
                 break;
             case Return @return:
                 PrettyPrintReturn(writer, @return, indent);
@@ -66,20 +70,29 @@ public abstract class TackyNode
 
     private static void PrettyPrintProgram(TextWriter writer, Program program, int indent)
     {
-        foreach (var functionDefinition in program.FunctionDefinitions)
+        foreach (var topLevel in program.TopLevels)
         {
-            functionDefinition.PrettyPrint(writer, indent);
+            topLevel.PrettyPrint(writer, indent);
         }
     }
 
-    private static void PrettyPrintFunctionDefinition(TextWriter writer, FunctionDefinition functionDefinition, int indent)
+    private static void PrettyPrintFunction(TextWriter writer, Function function, int indent)
     {
-        WriteLine(writer, $"{functionDefinition.Name}({string.Join(", ", functionDefinition.Parameters)})", indent);
-        foreach (var instruction in functionDefinition.Body)
+        WriteLine(writer, $"{function.Name}({string.Join(", ", function.Parameters)})", indent);
+        foreach (var instruction in function.Body)
         {
             instruction.PrettyPrint(writer, indent + 1);
         }
         WriteLine(writer, ")", indent);
+    }
+
+    private static void PrettyPrintStaticVariable(TextWriter writer, StaticVariable staticVariable, int indent)
+    {
+        if (staticVariable.Global)
+        {
+            Write(writer, "global ", indent);
+        }
+        WriteLine(writer, $"{staticVariable.Name} = {staticVariable.InitialValue}", 0);
     }
 
     private static void PrettyPrintReturn(TextWriter writer, Return @return, int indent)

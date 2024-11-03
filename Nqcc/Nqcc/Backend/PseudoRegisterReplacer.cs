@@ -1,12 +1,12 @@
 ﻿using Nqcc.Assembly;
 using Nqcc.Assembly.Instructions;
 using Nqcc.Assembly.Operands;
-using Nqcc.Symbols;
+using Nqcc.Assembly.TopLevels;
 using System.Collections.Immutable;
 
 namespace Nqcc.Backend;
 
-public class PseudoRegisterReplacer(SymbolTable symbols, Program tacky)
+public class PseudoRegisterReplacer(Symbols.SymbolTable symbols, Program tacky)
 {
     private int currentOffset = 0;
     private readonly Dictionary<string, int> offsetMap = [];
@@ -20,27 +20,33 @@ public class PseudoRegisterReplacer(SymbolTable symbols, Program tacky)
 
     private Program ReplaceProgram(Program program)
     {
-        var builder = ImmutableArray.CreateBuilder<FunctionDefinition>();
+        var builder = ImmutableArray.CreateBuilder<TopLevel>();
 
-        foreach (var functionDefinition in program.FunctionDefinitions)
+        foreach (var topLevel in program.TopLevels)
         {
-            builder.Add(ReplaceFunction(functionDefinition));
+            builder.Add(ReplaceTopLevel(topLevel));
         }
 
         return new Program(builder.ToImmutable());
     }
 
-    private FunctionDefinition ReplaceFunction(FunctionDefinition functionDefinition)
+    private TopLevel ReplaceTopLevel(TopLevel topLevel) => topLevel switch
+    {
+        Function function => ReplaceFunction(function),
+        _ => topLevel,
+    };
+
+    private Function ReplaceFunction(Function function)
     {
         currentOffset = 0;
         offsetMap.Clear();
 
-        var instructions = ReplaceInstructions(functionDefinition.Instructions);
+        var instructions = ReplaceInstructions(function.Instructions);
 
-        var function = (Function)symbols[functionDefinition.Name];
-        symbols.AddOrReplace(new Function(function.Name, function.ParameterCount, function.IsDefined, -currentOffset));
+        var functionSymbol = symbols.GetFunction(function.Name);
+        symbols.AddOrReplace(new Symbols.Function(functionSymbol.Name, functionSymbol.FunctionType, functionSymbol.Attributes, -currentOffset));
 
-        return new FunctionDefinition(functionDefinition.Name, instructions);
+        return new Function(function.Name, function.Global, instructions);
     }
 
     private ImmutableArray<Instruction> ReplaceInstructions(ImmutableArray<Instruction> instructions)
@@ -124,8 +130,13 @@ public class PseudoRegisterReplacer(SymbolTable symbols, Program tacky)
         _ => operand
     };
 
-    private Stack ReplacePseudoRegister(PseudoRegister pseudoRegister)
+    private Operand ReplacePseudoRegister(PseudoRegister pseudoRegister)
     {
+        if (symbols.IsStaticVariable(pseudoRegister.Name))
+        {
+            return new Data(pseudoRegister.Name);
+        }
+
         if (!offsetMap.TryGetValue(pseudoRegister.Name, out var offset))
         {
             currentOffset -= 4;

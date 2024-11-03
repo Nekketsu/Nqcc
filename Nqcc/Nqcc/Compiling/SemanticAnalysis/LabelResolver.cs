@@ -17,13 +17,21 @@ public class LabelResolver(Program ast)
 
     private Program ResolveProgram(Program program)
     {
-        var builder = ImmutableArray.CreateBuilder<FunctionDeclaration>();
+        var builder = ImmutableArray.CreateBuilder<Declaration>();
 
-        foreach (var functionDeclaration in program.FunctionDeclarations)
+        foreach (var declaration in program.Declarations)
         {
-            functions.Push(functionDeclaration.Name);
-            builder.Add(ResolveFunctionDeclaration(functionDeclaration));
-            functions.Pop();
+            switch (declaration)
+            {
+                case FunctionDeclaration functionDeclaration:
+                    functions.Push(functionDeclaration.Name);
+                    builder.Add(ResolveFunctionDeclaration(functionDeclaration));
+                    functions.Pop();
+                    break;
+                case VariableDeclaration:
+                    builder.Add(declaration);
+                    break;
+            }
         }
 
         foreach (var @goto in gotos)
@@ -41,7 +49,7 @@ public class LabelResolver(Program ast)
     {
         var body = functionDeclaration.Body is null ? null : ResolveBlock(functionDeclaration.Body);
 
-        return new FunctionDeclaration(functionDeclaration.Name, functionDeclaration.Parameters, body);
+        return new FunctionDeclaration(functionDeclaration.Name, functionDeclaration.Parameters, body, functionDeclaration.StorageClass);
     }
 
     private Block ResolveBlock(Block block)

@@ -1,7 +1,11 @@
 ﻿using Nqcc.Ast;
 using Nqcc.Ast.Declarations;
 using Nqcc.Ast.ForInits;
+using Nqcc.Ast.StorageClasses;
 using Nqcc.Symbols;
+using Nqcc.Symbols.IdentifierAttributes;
+using Nqcc.Symbols.InitialValues;
+using Nqcc.Symbols.Types;
 
 namespace Nqcc.Compiling.SemanticAnalysis;
 
@@ -11,41 +15,118 @@ public class TypeChecker(SymbolTable symbols, Program program)
 
     private void CheckProgram(Program program)
     {
-        foreach (var functionDeclaration in program.FunctionDeclarations)
+        foreach (var declaration in program.Declarations)
         {
-            CheckFunctionDeclaration(functionDeclaration);
+            CheckGlobalDeclaration(declaration);
+        }
+    }
+
+    private void CheckGlobalDeclaration(Declaration declaration)
+    {
+        switch (declaration)
+        {
+            case FunctionDeclaration functionDeclaration:
+                CheckFunctionDeclaration(functionDeclaration);
+                break;
+            case VariableDeclaration variableDeclaration:
+                CheckFileScopeVariableDeclaration(variableDeclaration);
+                break;
         }
     }
 
     private void CheckFunctionDeclaration(FunctionDeclaration functionDeclaration)
     {
+        var functionType = new FunctionType(functionDeclaration.Parameters.Length);
         var hasBody = functionDeclaration.Body is not null;
         var alreadyDefined = false;
+        var global = functionDeclaration.StorageClass is not Static;
 
         if (symbols.TryGetValue(functionDeclaration.Name, out var symbol))
         {
-            if (symbol is not Function function || function.ParameterCount != functionDeclaration.Parameters.Length)
+            if (symbol is not Function function || function.FunctionType.ParameterCount != functionDeclaration.Parameters.Length)
             {
                 throw new Exception($"Redeclared function {functionDeclaration.Name} with a different type");
             }
 
-            alreadyDefined = function.IsDefined;
+            alreadyDefined = function.Attributes.Defined;
             if (alreadyDefined && hasBody)
             {
                 throw new Exception($"Defined body of function {functionDeclaration.Name} twice");
             }
+
+            if (function.Attributes.Global && functionDeclaration.StorageClass is Static)
+            {
+                throw new Exception("Static function declaration follows non-static");
+            }
+
+            global = function.Attributes.Global;
         }
 
-        symbols.AddOrReplace(new Function(functionDeclaration.Name, functionDeclaration.Parameters.Length, alreadyDefined || hasBody));
+        var attributes = new FunctionAttributes(alreadyDefined || hasBody, global);
+        symbols.AddOrReplace(new Function(functionDeclaration.Name, functionType, attributes));
 
         if (functionDeclaration.Body is not null)
         {
             foreach (var paramenter in functionDeclaration.Parameters)
             {
-                symbols.Add(new Variable(paramenter, new Symbols.Types.Int()));
+                symbols.Add(new Variable(paramenter, new Int(), new LocalAttributes()));
             }
             CheckBlock(functionDeclaration.Body);
         }
+    }
+
+    private void CheckFileScopeVariableDeclaration(VariableDeclaration variableDeclaration)
+    {
+        InitialValue initialValue = variableDeclaration.Initializer switch
+        {
+            Ast.Expressions.Constant constant => new Initial(constant.Value),
+            null => variableDeclaration.StorageClass is Extern
+                ? new NoInitializer()
+                : new Tentative(),
+            _ => throw new Exception("Non-constant initializer!"),
+        };
+
+        var global = variableDeclaration.StorageClass is not Static;
+
+        if (symbols.TryGetValue(variableDeclaration.Name, out var symbol))
+        {
+            if (symbol is not Variable variable)
+            {
+                throw new Exception("Function redeclared as variable");
+            }
+            if (variable.Attributes is not StaticAttributes staticAttributes)
+            {
+                throw new Exception("Internal error, file-scope variable previously declared as local variable or function");
+            }
+
+            if (variableDeclaration.StorageClass is Extern)
+            {
+                global = staticAttributes.Global;
+            }
+            else if (staticAttributes.Global != global)
+            {
+                throw new Exception("Conflicting variable linkage");
+            }
+
+            if (staticAttributes.InitialValue is Initial)
+            {
+                if (initialValue is Initial)
+                {
+                    throw new Exception("Conflicting file scope variable definitions");
+                }
+                else
+                {
+                    initialValue = staticAttributes.InitialValue;
+                }
+            }
+            else if (initialValue is not Initial && staticAttributes.InitialValue is Tentative)
+            {
+                initialValue = new Tentative();
+            }
+        }
+
+        var attributes = new StaticAttributes(initialValue, global);
+        symbols.AddOrReplace(new Variable(variableDeclaration.Name, new Int(), attributes));
     }
 
     private void CheckBlock(Block block)
@@ -129,7 +210,7 @@ public class TypeChecker(SymbolTable symbols, Program program)
         switch (declaration)
         {
             case VariableDeclaration variableDeclaration:
-                CheckVariableDeclaration(variableDeclaration);
+                CheckLocalVariableDeclaration(variableDeclaration);
                 break;
             case FunctionDeclaration functionDeclaration:
                 CheckFunctionDeclaration(functionDeclaration);
@@ -142,34 +223,19 @@ public class TypeChecker(SymbolTable symbols, Program program)
         switch (expression)
         {
             case Ast.Expressions.FunctionCall functionCall:
+                var functionSymbol = symbols.GetFunction(functionCall.Name);
+                if (functionSymbol.FunctionType.ParameterCount != functionCall.Arguments.Length)
                 {
-                    var symbol = symbols[functionCall.Name];
-                    switch (symbol)
-                    {
-                        case Variable:
-                            throw new Exception("Tried to use variable as a function name");
-                        case Function function:
-                            if (function.ParameterCount != functionCall.Arguments.Length)
-                            {
-                                throw new Exception("Function called with wrong number of argumnets");
-                            }
-                            foreach (var argument in functionCall.Arguments)
-                            {
-                                CheckExpression(argument);
-                            }
-                            break;
-                    }
-                    break;
+                    throw new Exception("Function called with wrong number of argumnets");
                 }
+                foreach (var argument in functionCall.Arguments)
+                {
+                    CheckExpression(argument);
+                }
+                break;
             case Ast.Expressions.Variable variable:
-                {
-                    var symbol = symbols[variable.Name];
-                    if (symbol is Function)
-                    {
-                        throw new Exception("Tried to use function name as variable");
-                    }
-                    break;
-                }
+                _ = symbols.GetVariable(variable.Name);
+                break;
             case Ast.Expressions.Unary unary:
                 CheckExpression(unary.Expression);
                 break;
@@ -203,8 +269,10 @@ public class TypeChecker(SymbolTable symbols, Program program)
     {
         switch (init)
         {
+            case InitDeclaration { Declaration.StorageClass: not null }:
+                throw new Exception("Storage class not permitted on declaration in for loop header");
             case InitDeclaration initDeclaration:
-                CheckVariableDeclaration(initDeclaration.Declaration);
+                CheckLocalVariableDeclaration(initDeclaration.Declaration);
                 break;
             case InitExpression initExpression:
                 if (initExpression.Expression is not null)
@@ -215,12 +283,44 @@ public class TypeChecker(SymbolTable symbols, Program program)
         }
     }
 
-    private void CheckVariableDeclaration(VariableDeclaration declaration)
+    private void CheckLocalVariableDeclaration(VariableDeclaration variableDeclaration)
     {
-        symbols.Add(new Variable(declaration.Name, new Symbols.Types.Int()));
-        if (declaration.Initializer is not null)
+        if (variableDeclaration.StorageClass is Extern)
         {
-            CheckExpression(declaration.Initializer);
+            if (variableDeclaration.Initializer is not null)
+            {
+                throw new Exception("Initializer or local extern variable declaration");
+            }
+            if (symbols.TryGetValue(variableDeclaration.Name, out var symbol))
+            {
+                if (symbol is not Variable)
+                {
+                    throw new Exception("Function declared as variable");
+                }
+            }
+            else
+            {
+                symbols.Add(new Variable(variableDeclaration.Name, new Int(), new StaticAttributes(new NoInitializer(), true)));
+            }
+        }
+        else if (variableDeclaration.StorageClass is Static)
+        {
+            InitialValue initialValue = variableDeclaration.Initializer switch
+            {
+                Ast.Expressions.Constant constant => new Initial(constant.Value),
+                null => new Initial(0),
+                _ => throw new Exception("Non-constant initializer on local static variable"),
+            };
+            symbols.AddOrReplace(new Variable(variableDeclaration.Name, new Int(), new StaticAttributes(initialValue, false)));
+
+        }
+        else
+        {
+            symbols.Add(new Variable(variableDeclaration.Name, new Int(), new LocalAttributes()));
+            if (variableDeclaration.Initializer is not null)
+            {
+                CheckExpression(variableDeclaration.Initializer);
+            }
         }
     }
 }

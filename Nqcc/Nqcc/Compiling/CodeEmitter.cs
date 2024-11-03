@@ -4,6 +4,7 @@ using Nqcc.Assembly.ConditionCodes;
 using Nqcc.Assembly.Instructions;
 using Nqcc.Assembly.Operands;
 using Nqcc.Assembly.Operands.Registers;
+using Nqcc.Assembly.TopLevels;
 using Nqcc.Assembly.UnaryOperators;
 
 namespace Nqcc.Compiling;
@@ -20,31 +21,88 @@ public abstract class CodeEmitter(TextWriter writer) : ICodeEmitter
 
     protected abstract string GetFunctionName(string name);
 
+    protected abstract string GetAlignDirective(int alignment);
+
     protected abstract void EmitStackNote();
 
     private void EmitProgram(Program program)
     {
-        foreach (var functionDefinition in program.FunctionDefinitions)
+        foreach (var topLevel in program.TopLevels)
         {
-            EmitFunction(functionDefinition);
+            EmitTopLevel(topLevel);
             writer.WriteLine();
         }
 
         EmitStackNote();
     }
 
-    private void EmitFunction(FunctionDefinition functionDefinition)
+    private void EmitTopLevel(TopLevel topLevel)
     {
-        var name = GetLabelName(functionDefinition.Name);
-        writer.WriteLine($"\t.globl {name}");
+        switch (topLevel)
+        {
+            case Function function:
+                EmitFunction(function);
+                break;
+            case StaticVariable staticVariable:
+                EmitStaticVariable(staticVariable);
+                break;
+        }
+    }
+
+    private void EmitFunction(Function function)
+    {
+        var name = GetLabelName(function.Name);
+        if (function.Global)
+        {
+            writer.WriteLine($"\t.globl {name}");
+        }
+        writer.WriteLine("\t.text");
         writer.WriteLine($"{name}:");
         writer.WriteLine("\tpushq\t%rbp");
         writer.WriteLine("\tmovq\t%rsp, %rbp");
 
-        foreach (var instruction in functionDefinition.Instructions)
+        foreach (var instruction in function.Instructions)
         {
             EmitInstruction(instruction);
         }
+    }
+
+    private void EmitStaticVariable(StaticVariable staticVariable)
+    {
+        if (staticVariable.InitialValue == 0)
+        {
+            EmitZeroInitializedStaticVariable(staticVariable);
+        }
+        else
+        {
+            EmitNonZeroInitializedStaticVariable(staticVariable);
+        }
+    }
+
+    private void EmitZeroInitializedStaticVariable(StaticVariable staticVariable)
+    {
+        var name = GetLabelName(staticVariable.Name);
+        if (staticVariable.Global)
+        {
+            writer.WriteLine($"\t.globl {name}");
+        }
+        writer.WriteLine("\t.bss");
+        writer.WriteLine($"\t{GetAlignDirective(4)}");
+        writer.WriteLine($"{name}:");
+        writer.WriteLine("\t.zero 4");
+    }
+
+    private void EmitNonZeroInitializedStaticVariable(StaticVariable staticVariable)
+    {
+        var name = GetLabelName(staticVariable.Name);
+        if (staticVariable.Global)
+        {
+            writer.WriteLine($"\t.globl {name}");
+        }
+        writer.WriteLine("\t.data");
+        writer.WriteLine($"\t{GetAlignDirective(4)}");
+        writer.WriteLine($"{name}:");
+        writer.WriteLine($"\t.long {staticVariable.InitialValue}");
     }
 
     private void EmitInstruction(Instruction instruction)
@@ -209,6 +267,7 @@ public abstract class CodeEmitter(TextWriter writer) : ICodeEmitter
         Register register => ShowRegisterOperand(register),
         Stack stack => ShowStackOperand(stack),
         Imm imm => ShowImmOperand(imm),
+        Data data => ShowDataOperand(data),
         _ => throw new NotImplementedException()
     };
 
@@ -235,6 +294,8 @@ public abstract class CodeEmitter(TextWriter writer) : ICodeEmitter
     private static string ShowStackOperand(Stack stack) => $"{stack.Offset}(%rbp)";
 
     private static string ShowImmOperand(Imm imm) => $"${imm.Value}";
+
+    private static string ShowDataOperand(Data data) => $"{data.Name}(%rip)";
 
     private static string ShowByteOperand(Operand operand) => operand switch
     {
